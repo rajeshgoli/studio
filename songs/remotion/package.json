@@ -1,0 +1,21 @@
+{
+  "name": "studio-songs",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render LyricShort out/short.mp4",
+    "still": "remotion still"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "@remotion/media-utils": "4.0.539",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}

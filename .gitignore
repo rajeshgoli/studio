@@ -1,0 +1,14 @@
+# Productions live in $STUDIO_CONTENT, outside this repo. Generated files that land here are ignored.
+songs/remotion/public/*/
+songs/remotion/out/
+songs/kit/
+node_modules/
+.venv/
+.venv-*/
+__pycache__/
+.DS_Store
+*.wav
+*.mp3
+*.m4a
+*.mp4
+.remotion/
