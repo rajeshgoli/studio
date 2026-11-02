@@ -200,3 +200,11 @@ compact toolbar offers **Back to productions** (keeps the idle room open) and
 preview; returning also rechecks the server before leaving. **Return to room**
 opens the recording screen again. The singing room keeps wheel recording controls,
 while idle/preview wheel input over lyrics or saved takes scrolls those lists.
+
+
+The singing workspace separates **Record**, **Setup**, and **Saved takes**. The
+Record view keeps lyrics and the primary action in the viewport; Setup holds guide
+and earbud controls, and Saved takes holds playback and selection. Recording
+wheel/keyboard shortcuts do not run in Setup or Saved takes, or on form controls.
+Tabs are disabled during recording or line marking; a recording started elsewhere
+returns this page to Record. Lyrics scroll normally while idle or previewing.
