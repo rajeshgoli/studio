@@ -28,7 +28,9 @@ $STUDIO_CONTENT/
 | Score | `score.py` | Tanpura on Sa (a Pa string, or Ma if the raga has no Pa); a flute or violin that answers in the singer's pauses by replaying the phrase just sung; a swarmandal glissando through the raga's notes at scene changes; temple bells; optional mridangam. |
 | Mix | `mix.py` | Light vocal leveling and reverb, optional Rubber Band retune of the voice, the score ducked under the voice, loudness to -14 LUFS, then `prepare.py` writes the timeline for the animation. |
 | Animate | `remotion/` | `LyricShort` draws the sky, one motif scene per run of lines, the two characters acting out the song (`Duet.tsx`), a gold thread tracing the sung pitch, gloss chips, the lyrics (English meaning first, then Devanagari, then the transliteration lit as each word is sung), and the hook and title cards. `Thumbnail` renders a frame with the text hidden and a headline. |
-| Record | `sing_studio.py` | A browser page on port 9400: previews a guide (original, karaoke, tanpura, or a mix) in the earbuds, records the USB mic, and takes line marks from the mouse wheel. |
+| Record | `sing_room.py` via the Studio server | Open http://localhost:8450 on the recording Mac, choose the song, then **Open singing room**. The room previews a guide (original, karaoke, tanpura, or a mix) in the earbuds, records the USB mic, and takes line marks from the mouse wheel. |
+
+The installed server starts when visited; no per-song launcher is needed. Close the current recording room before opening another. See [server setup](../server/README.md#installed-server-macos) if the server is not installed. Remote access is for viewing only.
 
 `./render.sh <song>` runs analyze, score, mix and the render. It's heavy, so run it through the queue.
 

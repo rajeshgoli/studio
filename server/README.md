@@ -45,8 +45,9 @@ Hidden paths, deleted takes, intermediate build folders, and escapes are denied.
 WAV files are converted to 16-bit samples for browser compatibility, in chunks,
 with an eight-file temporary disk cache keyed by the opened file's identity,
 modification/change times, and size. Other media streams directly from disk.
-The old singing studio imports
-`playable` and `_send_audio` from this package and retains its existing launcher.
+The shared recording rooms use this package for media playback. The standalone
+singing recorder’s HTTP server and launcher have been retired; choose a song at
+http://localhost:8450 on the recording Mac, then **Open singing room**.
 
 ## Access configuration
 
