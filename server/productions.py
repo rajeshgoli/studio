@@ -42,6 +42,8 @@ class Productions:
                                "newest_render": media[0] if media else None})
             except (OSError, ValueError, AttributeError):
                 continue
+        from .talk_viewer import Talks
+        result.extend(Talks(self.root).list())
         return result
 
     @staticmethod
