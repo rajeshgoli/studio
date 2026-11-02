@@ -6,9 +6,10 @@
 <style>
 :root{color-scheme:light dark;--bg:#faf9f6;--card:#fff;--ink:#242c30;--muted:#626d70;--line:#d9dfdc;--accent:#116958}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 system-ui,sans-serif}header,main{max-width:1050px;margin:auto;padding:20px 24px}header{display:flex;justify-content:space-between;border-bottom:1px solid var(--line)}a{color:var(--accent);text-underline-offset:3px}nav{display:flex;gap:24px}h1{font-size:2.2rem;line-height:1.15;margin:24px 0 12px}h2{font-size:1.25rem;margin:32px 0 12px}h3{font-size:1.05rem;margin:0 0 8px}p{margin:8px 0}small,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}.card{padding:20px;background:var(--card);border:1px solid var(--line);border-radius:12px;min-width:0;overflow-wrap:anywhere}.stack{display:grid;gap:12px}audio,video{width:100%;display:block;margin-top:12px}video{max-height:480px}img{display:block;width:100%;height:auto;border-radius:6px}button{font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--accent);padding:10px 14px;cursor:pointer;min-height:44px}button:hover{border-color:var(--accent)}button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.badge{color:var(--accent);font-size:.8rem;font-weight:700;margin-left:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;max-height:500px;overflow:auto}.deva{font-size:1.25rem}.translit{font-size:.85rem;color:var(--muted)}ol{padding-left:24px}li{margin:8px 0}#error{color:#b44330}#error:empty{display:none}label{display:inline-flex;gap:10px;align-items:center;min-height:44px}input{width:20px;height:20px}.job{display:flex;justify-content:space-between;gap:12px;align-items:center}.job button{flex-shrink:0}.copy-status{margin-left:12px;font-size:.85rem}footer{margin:36px 0;color:var(--muted);font-size:.85rem}@media(max-width:500px){header,main{padding:16px}h1{font-size:1.9rem}.card{padding:16px}.job{align-items:start;flex-direction:column}}@media(prefers-color-scheme:dark){:root{--bg:#171d20;--card:#20292d;--ink:#e6eeeb;--muted:#a8b8b2;--line:#3b4b48;--accent:#82d9bd}#error{color:#ffad97}}
+button:disabled{opacity:.45;cursor:not-allowed}iframe{display:block}
 </style>
 <header><a href="/">Studio</a><nav aria-label="Main"><a href="/">Productions</a><a href="/jobs">Jobs</a></nav></header>
-<main><h1 id="title">Studio</h1><p id="subtitle" class="muted">Your productions, wherever you are.</p><p id="error" role="status"></p><div id="content"></div><footer>Read-only viewer · Recordings and changes are made on the Mac.</footer></main>
+<main><h1 id="title">Studio</h1><p id="subtitle" class="muted">Your productions, wherever you are.</p><p id="error" role="status"></p><div id="content"></div><footer>Viewer · Checking for a connection to the recording Mac.</footer></main>
 <script>
 'use strict';
 const content=document.querySelector('#content'), title=document.querySelector('#title');
@@ -28,9 +29,10 @@ if(route==='/'){
  section('room','Recording room');section('productions','Productions');
  update=async()=>{const [items,status]=await Promise.all([get('/api/productions'),get('/api/status')]);
  changed('room',status,s=>s.room?`<p>${esc(typeof s.room==='object'?JSON.stringify(s.room):s.room)} · ${esc(s.stage)}${s.busy?' · busy':''}</p>`:'<p class="muted">No room open.</p>');
- changed('productions',items,rows=>`<div class="grid">${rows.map(p=>`<article class="card"><h3><a href="/${p.kind==='talk'?'talk':'song'}/${encodeURIComponent(p.id)}">${esc(p.title)}</a></h3><small>${esc(p.kind)} · ${esc(p.id)}</small>${p.newest_render?`<p>Newest render · ${esc(date(p.newest_render.modified))}</p>${media(p.newest_render)}`:'<p class="muted">No render yet.</p>'}</article>`).join('')||'<p>No productions yet.</p>'}</div>`);};
+ changed('productions',items,rows=>`<div class="grid">${rows.map(p=>`<article class="card"><h3><a href="/${p.kind==='talk'?'talk':'song'}/${encodeURIComponent(p.id)}">${esc(p.title)}</a></h3><small>${esc(p.kind)} · ${esc(p.id)}</small><p><button disabled data-open-room="${p.kind==='talk'?'talk':'sing'}" data-production="${esc(p.id)}">Open ${p.kind==='talk'?'talking':'singing'} room</button></p>${p.newest_render?`<p>Newest render · ${esc(date(p.newest_render.modified))}</p>${media(p.newest_render)}`:'<p class="muted">No render yet.</p>'}</article>`).join('')||'<p>No productions yet.</p>'}</div>`);};
 }else if(route.startsWith('/song/')){
  const pid=decodeURIComponent(route.slice(6));
+ const entry=document.createElement('button');entry.textContent='Open '+(route.startsWith('/song/')?'singing':'talking')+' room';entry.dataset.openRoom=route.startsWith('/song/')?'sing':'talk';entry.dataset.production=pid;entry.disabled=true;content.append(entry);
  document.querySelector('#subtitle').textContent='Song · recordings, renders and publishing text';
  for(const [id,label] of [['lines','Lines'],['takes','Takes'],['marks','Line marks'],['timing','Line times'],['renders','Renders'],['images','Contact sheet & thumbnails'],['publishing','Publishing text']])section(id,label);
  update=async()=>{const s=await get('/api/song/'+encodeURIComponent(pid));title.textContent=s.title;document.title=s.title+' · Studio';
@@ -45,6 +47,7 @@ if(route==='/'){
  };
  }else if(route.startsWith('/talk/')){
  const pid=decodeURIComponent(route.slice(6));
+ const entry=document.createElement('button');entry.textContent='Open '+(route.startsWith('/song/')?'singing':'talking')+' room';entry.dataset.openRoom=route.startsWith('/song/')?'sing':'talk';entry.dataset.production=pid;entry.disabled=true;content.append(entry);
  document.querySelector('#subtitle').textContent='Talking video · recordings, renders and publishing text';
  for(const [id,label] of [['takes','Takes by part'],['renders','Renders & shorts'],['publishing','Publishing text']])section(id,label);
  update=async()=>{const t=await get('/api/talk/'+encodeURIComponent(pid));title.textContent=t.title;document.title=t.title+' · Studio';
@@ -67,4 +70,5 @@ if(route==='/'){
 // a tab never introduces an extra poll inside the one-second interval.
 async function poll(){if(!document.hidden&&update){try{await update();document.querySelector('#error').textContent='';}catch(e){document.querySelector('#error').textContent=e.message;}}setTimeout(poll,1000);}poll();
 </script>
+<script src="/local-rooms.js"></script>
 </html>
