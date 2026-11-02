@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Studio</title>
+<style>
+:root{color-scheme:light dark;--bg:#faf9f6;--card:#fff;--ink:#242c30;--muted:#626d70;--line:#d9dfdc;--accent:#116958}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 system-ui,sans-serif}header,main{max-width:1050px;margin:auto;padding:20px 24px}header{display:flex;justify-content:space-between;border-bottom:1px solid var(--line)}a{color:var(--accent);text-underline-offset:3px}nav{display:flex;gap:24px}h1{font-size:2.2rem;line-height:1.15;margin:24px 0 12px}h2{font-size:1.25rem;margin:32px 0 12px}h3{font-size:1.05rem;margin:0 0 8px}p{margin:8px 0}small,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}.card{padding:20px;background:var(--card);border:1px solid var(--line);border-radius:12px;min-width:0;overflow-wrap:anywhere}.stack{display:grid;gap:12px}audio,video{width:100%;display:block;margin-top:12px}video{max-height:480px}img{display:block;width:100%;height:auto;border-radius:6px}button{font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--accent);padding:10px 14px;cursor:pointer;min-height:44px}button:hover{border-color:var(--accent)}button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.badge{color:var(--accent);font-size:.8rem;font-weight:700;margin-left:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;max-height:500px;overflow:auto}.deva{font-size:1.25rem}.translit{font-size:.85rem;color:var(--muted)}ol{padding-left:24px}li{margin:8px 0}#error{color:#b44330}#error:empty{display:none}label{display:inline-flex;gap:10px;align-items:center;min-height:44px}input{width:20px;height:20px}.job{display:flex;justify-content:space-between;gap:12px;align-items:center}.job button{flex-shrink:0}.copy-status{margin-left:12px;font-size:.85rem}footer{margin:36px 0;color:var(--muted);font-size:.85rem}@media(max-width:500px){header,main{padding:16px}h1{font-size:1.9rem}.card{padding:16px}.job{align-items:start;flex-direction:column}}@media(prefers-color-scheme:dark){:root{--bg:#171d20;--card:#20292d;--ink:#e6eeeb;--muted:#a8b8b2;--line:#3b4b48;--accent:#82d9bd}#error{color:#ffad97}}
+</style>
+<header><a href="/">Studio</a><nav aria-label="Main"><a href="/">Productions</a><a href="/jobs">Jobs</a></nav></header>
+<main><h1 id="title">Studio</h1><p id="subtitle" class="muted">Your productions, wherever you are.</p><p id="error" role="status"></p><div id="content"></div><footer>Read-only viewer · Recordings and changes are made on the Mac.</footer></main>
+<script>
+'use strict';
+const content=document.querySelector('#content'), title=document.querySelector('#title');
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const date=v=>v?new Date(typeof v==='number'?v*1000:v).toLocaleString():'—';
+const val=v=>v??'—';
+const guide=v=>({tanpura:'tanpura (steady home-note guide)',original:'original reference recording',karaoke:'karaoke (reference with singing removed)',both:'reference recording + steady home-note guide','karaoke+tanpura':'reference with singing removed + steady home-note guide'}[v]??val(v));
+const media=a=>!a?'':`<${a.name.endsWith('.mp4')?'video':'audio'} controls preload="none" src="${esc(a.url)}"></${a.name.endsWith('.mp4')?'video':'audio'}>`;
+const assetCard=a=>`<article class="card"><h3><a href="${esc(a.url)}">${esc(a.name)}</a></h3><small>${esc(date(a.modified))}</small>${media(a)}</article>`;
+const cache=new Map();
+function section(id,heading){const s=document.createElement('section');s.innerHTML=`<h2>${esc(heading)}</h2><div id="${id}"></div>`;content.append(s);}
+function changed(id,data,render){const text=JSON.stringify(data);if(cache.get(id)===text)return;cache.set(id,text);document.getElementById(id).innerHTML=render(data);}
+async function get(url){const r=await fetch(url,{cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||'Unable to load this page.');return data;}
+let update, selectedJob=null, allJobs=[], showAll=false;
+const route=location.pathname;
+if(route==='/'){
+ section('room','Recording room');section('productions','Productions');
+ update=async()=>{const [items,status]=await Promise.all([get('/api/productions'),get('/api/status')]);
+ changed('room',status,s=>s.room?`<p>${esc(typeof s.room==='object'?JSON.stringify(s.room):s.room)} · ${esc(s.stage)}${s.busy?' · busy':''}</p>`:'<p class="muted">No room open.</p>');
+ changed('productions',items,rows=>`<div class="grid">${rows.map(p=>`<article class="card"><h3><a href="/${p.kind==='talk'?'talk':'song'}/${encodeURIComponent(p.id)}">${esc(p.title)}</a></h3><small>${esc(p.kind)} · ${esc(p.id)}</small>${p.newest_render?`<p>Newest render · ${esc(date(p.newest_render.modified))}</p>${media(p.newest_render)}`:'<p class="muted">No render yet.</p>'}</article>`).join('')||'<p>No productions yet.</p>'}</div>`);};
+}else if(route.startsWith('/song/')){
+ const pid=decodeURIComponent(route.slice(6));
+ document.querySelector('#subtitle').textContent='Song · recordings, renders and publishing text';
+ for(const [id,label] of [['lines','Lines'],['takes','Takes'],['marks','Line marks'],['timing','Line times'],['renders','Renders'],['images','Contact sheet & thumbnails'],['publishing','Publishing text']])section(id,label);
+ update=async()=>{const s=await get('/api/song/'+encodeURIComponent(pid));title.textContent=s.title;document.title=s.title+' · Studio';
+ changed('lines',s.lines,rows=>`<div class="stack">${rows.map(l=>`<article class="card"><small>${esc(l.id)}</small><p>${esc(l.meaning)}</p><p class="deva" lang="sa">${esc(l.deva)}</p><p class="translit">${esc(l.translit)}</p></article>`).join('')||'<p>No lines yet.</p>'}</div>`);
+ changed('takes', {takes:s.takes,vocals:s.vocals},d=>`<p class="muted">Peak is the loudest point, measured in dBFS (decibels below the recording limit; 0 is the limit). Sa is the guide’s home note, measured in Hz (vibrations per second). “In use” follows the saved file-size match.</p>${d.vocals?`<article class="card"><h3>Voice used in the video</h3>${media(d.vocals)}</article>`:''}<div class="grid">${d.takes.map(t=>`<article class="card"><h3>${esc(t.name)}${t.in_use?'<span class="badge">In use</span>':''}</h3><p>${esc(val(t.seconds))} seconds · peak ${esc(val(t.peak_dbfs))} dBFS</p><p>Guide mode: ${esc(guide(t.guide))} · Sa: ${esc(val(t.sa_hz))} Hz</p>${t.audio?media(t.audio):'<p>Audio unavailable.</p>'}</article>`).join('')||'<p>No saved takes yet.</p>'}</div>`);
+ changed('marks',{marks:s.marks,lines:s.lines},d=>{const starts=d.marks.line_starts;return Array.isArray(starts)?`<ol>${starts.map((t,i)=>`<li>${esc(d.lines[i]?.id||'Line '+(i+1))}: ${esc(t)} seconds</li>`).join('')}</ol><p>End: ${esc(val(d.marks.end))} seconds</p>`:'<p>No line marks yet.</p>';});
+ changed('timing',s.timing,t=>Array.isArray(t.sung)?`<ol>${t.sung.map(l=>`<li>${esc(l.line)}: ${esc(l.start)}–${esc(l.end)} seconds</li>`).join('')}</ol>`:'<p>No line times yet.</p>');
+ changed('renders',s.renders,rows=>`<div class="grid">${rows.map(assetCard).join('')||'<p>No renders yet.</p>'}</div>`);
+ changed('images',s.images,rows=>`<div class="grid">${rows.map(a=>`<article class="card"><a href="${esc(a.url)}"><img loading="lazy" src="${esc(a.url)}" alt="${esc(a.name)}"></a><p>${esc(a.name)}</p></article>`).join('')||'<p>No images yet.</p>'}</div>`);
+ changed('publishing',s.publishing,p=>p.text?`<div class="card">${['title','description'].filter(k=>p[k]).map(k=>`<button type="button" data-copy="${k}">Copy ${k}</button> `).join('')}<span class="copy-status" role="status"></span><pre>${esc(p.text)}</pre></div>`:'<p>No publishing text yet.</p>');
+ document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{const status=document.querySelector('.copy-status');try{await navigator.clipboard.writeText(s.publishing[b.dataset.copy]);status.textContent='Copied '+b.dataset.copy+'.';}catch{status.textContent='Copy unavailable here. Select and copy the text below.';}});
+ };
+}else if(route==='/jobs'){
+ title.textContent='Jobs';document.title='Jobs · Studio';document.querySelector('#subtitle').textContent='Work running on the Mac, and recent results.';
+ content.innerHTML='<label><input id="show-all" type="checkbox">Show all jobs</label><p class="muted">Newest 50 jobs. Studio labels: song-, talk-, demucs-, sing-studio and magnetar.</p>';
+ section('jobs','Queue');section('log','Job log');document.getElementById('log').textContent='Choose a job to see its last 200 log lines.';
+ const renderJobs=()=>changed('jobs',{allJobs,showAll},({allJobs,showAll})=>`<div class="stack">${allJobs.filter(j=>showAll||j.studio).map(j=>{const seconds=j.started_at?Math.max(0,Math.floor(((j.finished_at?new Date(j.finished_at):new Date())-new Date(j.started_at))/1000)):null;return `<article class="card job"><div><h3>${esc(j.label||j.id)}</h3><p>${esc(j.state)} · started ${esc(date(j.started_at))}</p><small>Run time: <span data-start="${esc(j.started_at||'')}" data-end="${esc(j.finished_at||'')}">${seconds===null?'—':seconds+' seconds'}</span> · Memory budget: ${j.memory_bytes==null?'—':(j.memory_bytes/1024**3).toFixed(1)+' GiB (billions of bytes)'}</small></div><button type="button" data-job="${esc(j.id)}">View log</button></article>`;}).join('')||'<p>No matching jobs in the newest 50.</p>'}</div>`);
+ document.getElementById('show-all').onchange=e=>{showAll=e.target.checked;renderJobs();};
+ content.addEventListener('click',e=>{const b=e.target.closest('[data-job]');if(b){selectedJob=b.dataset.job;document.getElementById('log').textContent='Loading log…';cache.delete('log');}});
+ update=async()=>{allJobs=await get('/api/jobs');renderJobs();
+ document.querySelectorAll('[data-start]').forEach(el=>{if(el.dataset.start&&!el.dataset.end)el.textContent=Math.max(0,Math.floor((Date.now()-new Date(el.dataset.start))/1000))+' seconds';});
+ if(selectedJob){if(!allJobs.some(j=>j.id===selectedJob)){selectedJob=null;cache.delete('log');document.getElementById('log').textContent='This job is no longer in the newest 50.';}else{const job=selectedJob;const d=await get('/api/jobs/'+encodeURIComponent(job)+'/log');if(job===selectedJob)changed('log',{job,...d},d=>`<h3>${esc(d.job)}</h3><pre>${esc(d.log||'No log output yet.')}</pre>`);}}};
+}
+// Recursive timeout prevents overlap. Hidden tabs issue no requests, and showing
+// a tab never introduces an extra poll inside the one-second interval.
+async function poll(){if(!document.hidden&&update){try{await update();document.querySelector('#error').textContent='';}catch(e){document.querySelector('#error').textContent=e.message;}}setTimeout(poll,1000);}poll();
+</script>
+</html>

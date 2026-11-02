@@ -21,8 +21,15 @@ rehearsing, or transferring phone footage. There are no rooms in this package ye
 
 ## Routes
 
-- `GET /`: plain song list (no per-song viewer yet).
-- `GET /api/productions`: songs with `poem.json`, returning `id`, `kind`, `title`.
+- `GET /`: productions with newest render and recording-room status.
+- `GET /song/<id>` and `/api/song/<id>`: lines, takes, marks, line times, renders,
+  images, and publishing text. Copy buttons copy the title/description sections.
+- `GET /jobs` and `/api/jobs`: the newest 50 sm queue jobs; studio prefixes are
+  selected by default, with a show-all switch.
+- `GET /api/jobs/<job>/log`: last 200 lines for a job in the fresh queue list.
+  Commands use argument lists, a ten-second timeout, and no shell. Queue failures
+  return 503; unknown jobs return 404.
+- `GET /api/productions`: songs with `poem.json`, returning `id`, `kind`, `title`, `newest_render`.
 - `GET /api/status`: protocol version, room (`null`), stage (`idle`), busy flag.
 - `GET /api/busy`: `{"busy": false}` until a future room sets the flag.
 - `GET /file/<id>/<path>`: allowed production files, with HTTP byte ranges.
@@ -97,3 +104,10 @@ owner to allow microphone access in System Settings (checked by the singing-room
 ticket).
 
 Installer safety tests: `python3 -m unittest discover -s scripts/tests -v`.
+
+Viewer pages poll no faster than once per second while visible, skip unchanged
+sections, and use native media controls with `preload="none"`. Takes are marked
+in use when their file size matches both vocals.wav and marks.json vocals_bytes;
+this follows the recording format, rather than claiming a byte-for-byte identity.
+Missing optional files display empty sections. All metadata reads follow the same
+file allowlist and symlink checks as media.

@@ -17,6 +17,7 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from server.app import StudioServer
+from server.jobs import QueueUnavailable
 from server.guards import AccessGuard, local_guard, origin_guard
 from server.launchd import activate_socket
 from server.media import byte_range, playable
@@ -141,7 +142,7 @@ class ServerTest(unittest.TestCase):
     def test_routes_and_remote_denial(self):
         status, _, body = self.request()
         self.assertEqual(status, 200)
-        self.assertIn(b'A &lt;song&gt;', body)
+        self.assertIn(b'/api/productions', body)
         self.assertEqual(json.loads(self.request('/api/productions')[2])[0]['id'], 'sample')
         self.assertFalse(json.loads(self.request('/api/busy')[2])['busy'])
         self.assertEqual(self.request('/unknown')[0], 404)
@@ -152,6 +153,18 @@ class ServerTest(unittest.TestCase):
             self.assertEqual(self.request(headers={'Host': 'viewer.example'})[0], 200)
             self.assertEqual(self.request('/room/sing/', headers={'Host': 'viewer.example'})[0], 403)
             self.assertEqual(self.request('/room/open', 'POST', {'Host': 'viewer.example'})[0], 403)
+
+    def test_viewer_routes(self):
+        for path in ('/song/sample', '/jobs', '/api/song/sample', '/api/jobs'):
+            with patch.object(self.server.jobs, 'list', return_value=[]):
+                self.assertEqual(self.request(path)[0], 200)
+                self.assertEqual(self.request(path, headers={'Cf-Ray': 'remote'})[0], 403)
+        for path in ('/song/no', '/api/song/no', '/song/sample/../sample'):
+            self.assertEqual(self.request(path)[0], 404)
+        with patch.object(self.server.jobs, 'list', return_value=[]):
+            self.assertEqual(self.request('/api/jobs/--help/log')[0], 404)
+        with patch.object(self.server.jobs, 'list', side_effect=QueueUnavailable('Queue offline')):
+            self.assertEqual(self.request('/api/jobs')[0], 503)
 
     def test_post_checks(self):
         self.assertEqual(self.request('/room/open', 'POST')[0], 403)
