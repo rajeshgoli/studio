@@ -411,7 +411,13 @@ addEventListener('wheel',e=>{
  if(Math.abs(e.deltaY)>30&&Date.now()-lastWheel>600){lastWheel=Date.now();
   const busy=['rolling','singing','marking'].includes(stage);
   if(e.deltaY>0)post('step'); else if(busy)post('back');}},{passive:false});
-addEventListener('keydown',e=>{if(pane!=='record'||e.target.closest('input,select,button,textarea,a')||e.target.isContentEditable)return;
+addEventListener('keydown',e=>{
+ if(pane!=='record')return;
+ if(e.key==='Escape'){e.preventDefault();post('abort');return;}
+ if(e.target.closest('input,select,textarea,a')||e.target.isContentEditable)return;
+ // Enter on a button uses its native click once. Recording buttons retain
+ // Escape/arrow shortcuts after a click; navigation buttons do not record.
+ if(e.target.closest('button')&&(e.key==='Enter'||!e.target.closest('.controls')))return;
  if(e.key=='Enter'||e.key=='ArrowRight'){e.preventDefault();post('step')}
  if(e.key=='ArrowLeft')post('back'); if(e.key=='Escape')post('abort'); if(e.key=='t'||e.key=='T')post('beep')});
 let outs=null, lastTakes='';
