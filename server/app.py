@@ -9,6 +9,8 @@ from urllib.parse import unquote, urlsplit
 from .guards import AccessGuard, access_guard, local_guard, origin_guard
 from .media import send_file, send_wav
 from .rooms import RoomConflict, open_singing, take_path, command
+from .media import send_file
+from .rooms import RoomConflict, open_singing, take_path, command, open_talking, talk_command
 from .productions import Productions
 from .jobs import Jobs, QueueUnavailable
 from .viewer import page, song
@@ -103,7 +105,7 @@ class StudioServer(ThreadingHTTPServer):
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, data, ctype="application/json", status=200):
-        body = json.dumps(data).encode() if ctype == "application/json" else data.encode()
+        body = json.dumps(data).encode() if ctype == "application/json" else data if isinstance(data, bytes) else data.encode()
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -129,14 +131,14 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/status":
                     with self.server._lock:
                         room = self.server.room
-                        result.update(version=1, room="sing" if room else None,
+                        result.update(version=1, room=getattr(room, "kind", "sing") if room else None,
                                       stage=room.active_stage if room else "idle")
                 self._send(result)
             elif path.startswith("/room/sing/"):
                 source = None
                 with self.server._lock:
                     room = self.server.room
-                    if room is None:
+                    if room is None or getattr(room, "kind", "sing") != "sing":
                         raise FileNotFoundError()
                     route = path[len("/room/sing/"):]
                     if route == "":
@@ -154,6 +156,23 @@ class Handler(BaseHTTPRequestHandler):
                 if source is not None:
                     with source:
                         send_wav(self, source)
+            elif path.startswith('/room/talk/'):
+                with self.server._lock:
+                    room = self.server.room
+                    if room is None or getattr(room, 'kind', 'sing') != 'talk':
+                        raise FileNotFoundError()
+                    route = path[len('/room/talk/'):]
+                    if route == '':
+                        from talk.talk_room import make_page
+                        self._send(make_page(room), 'text/html; charset=utf-8')
+                    elif route == 'state':
+                        self._send(room.state())
+                    elif route == 'outputs':
+                        self._send({'outputs': room.outputs(), 'current': room.ear_name})
+                    elif route == 'preview.jpg':
+                        self._send(room.preview or b'', 'image/jpeg', 200 if room.preview else 503)
+                    else:
+                        raise FileNotFoundError()
             elif path == "/api/productions":
                 self._send(self.server.productions.list())
             elif path in {"/", "/jobs"}:
@@ -196,13 +215,20 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/room/open":
                     if self.server.room is not None:
                         raise RoomConflict("A room is already open; close it first")
-                    self.server.room = open_singing(self.server.productions, body)
+                    opener = {'sing': open_singing, 'talk': open_talking}.get(body.get('kind'))
+                    if opener is None:
+                        raise ValueError('kind must be sing or talk')
+                    self.server.room = opener(self.server.productions, body)
                 elif path == "/room/close":
                     if self.server.busy:
                         raise RoomConflict("Finish or abort the current activity first")
                     self.server.close_room()
-                elif path.startswith("/room/sing/") and self.server.room is not None:
+                elif (path.startswith("/room/sing/") and self.server.room is not None
+                      and getattr(self.server.room, "kind", "sing") == "sing"):
                     command(self.server.room, path[len("/room/sing/"):], body)
+                elif (path.startswith('/room/talk/') and self.server.room is not None
+                      and getattr(self.server.room, 'kind', 'sing') == 'talk'):
+                    talk_command(self.server.room, path[len('/room/talk/'):], body)
                 else:
                     raise FileNotFoundError()
             self._send({})

@@ -91,3 +91,63 @@ def command(room, action, body):
             room.ear.gain = body["gain"]
     else:
         raise FileNotFoundError(action)
+
+
+def open_talking(productions, body):
+    from .productions import ID
+    from talk.config import safe_path, choices
+    pid = body.get('production')
+    if not isinstance(pid, str) or not ID.fullmatch(pid):
+        raise ValueError('production must name a listed talk')
+    folder = safe_path(productions.root, 'talks/' + pid)
+    config = json.loads(safe_path(folder, 'production.json').read_text())
+    choices(config)
+    safe_path(folder, config['script_dir'])
+    safe_path(folder, config['takes_dir'])
+    if legacy_running():
+        raise RoomConflict('An old studio is answering on port 9400; close it first')
+    devices = json.loads((productions.root / 'studio.json').read_text())
+    if not all(isinstance(devices.get(k), str) and devices[k].strip() for k in ('mic', 'ear')):
+        raise ValueError('studio.json must provide mic and ear device names')
+    from talk.talk_room import Studio
+    return Studio(folder, config, devices)
+
+
+def talk_command(room, action, body):
+    if action == 'step':
+        if set(body) != {'dir'} or type(body['dir']) is not int or body['dir'] not in (-1, 1):
+            raise ValueError('dir must be 1 or -1')
+        room.step(body['dir'])
+    elif action == 'abort':
+        if body:
+            raise ValueError('abort takes no arguments')
+        room.abort()
+    elif action in {'part', 'ear', 'start', 'rehearse', 'beep', 'rescan'}:
+        if room.active_stage != 'idle':
+            raise RoomConflict('Finish or abort the current activity first')
+        key = {'part': 'name', 'ear': 'name', 'start': 'line', 'rehearse': 'on'}.get(action)
+        if set(body) != ({key} if key else set()):
+            raise ValueError('invalid arguments')
+        if action == 'part':
+            if body['name'] not in dict(room.choices):
+                raise ValueError('unknown part or session')
+            room.switch(body['name'])
+        elif action == 'ear':
+            if body['name'] not in room.outputs():
+                raise ValueError('unknown output')
+            room.set_ear(body['name'])
+        elif action == 'start':
+            if type(body['line']) is not int or not 0 <= body['line'] < len(room.lines):
+                raise ValueError('line must be an integer within this part')
+            room.start_line = body['line']
+        elif action == 'rehearse':
+            if type(body['on']) is not bool:
+                raise ValueError('on must be boolean')
+            room.rehearse = body['on']
+        elif action == 'beep':
+            from .devices import beep
+            room.ear.play(beep())
+        else:
+            room.rescan()
+    else:
+        raise FileNotFoundError(action)
