@@ -158,3 +158,36 @@ remain saved and the page reports the error.
 
 Focused hardware-free checks: `python -m unittest talk.tests.test_room -v`.
 A real camera take still needs the owner at the Mac; do not automate playback.
+
+
+## Recording from the public viewer
+
+The public viewer can connect directly to the recording Mac without changing the
+browser address. Add `"public_origin": "https://studio.example.com"` to the private
+server configuration, using the exact HTTPS viewer origin (no trailing slash).
+After owner authentication, `/api/local-connection` issues a credential valid for
+five minutes and the current server instance identifier. The page probes
+`http://localhost:<port>/bridge/probe` and requires the same instance before
+enabling **Open singing room** or **Open talking room**. The browser may ask for
+local-network permission. No OS detection is used; a failed probe leaves the viewer
+available with a retry button. The direct localhost entry continues to work.
+
+Recording HTML, commands, state, camera preview and take playback go over the
+loopback connection, with the credential in `X-Studio-Local`, never in URLs.
+The room page is displayed in an embedded frame under the viewer's origin. Its
+requests use the parent's direct transport; camera images and requested take audio
+use temporary browser blob URLs. Loading take playback does not start playback.
+Credentials refresh while the page is in use. Commands are never automatically
+retried after a network failure, because the first command might have succeeded.
+
+The direct route requires a loopback peer, exact local Host, no Cloudflare headers,
+the configured public Origin, and a valid origin-bound credential. POST still
+requires JSON. Preflights allow only GET/POST and Content-Type/X-Studio-Local on
+room, status and probe routes. Public tunnel requests cannot control rooms, even
+with a credential. Closing a busy room remains forbidden.
+
+Checks: `python -m unittest server.tests.test_local_connection` and
+`node server/tests/test_local_browser.cjs` (requires Playwright; optionally set
+`PLAYWRIGHT_MODULE` and `STUDIO_TEST_PYTHON`). Browser checks use disposable content
+and stand-in devices, verify both rooms under an HTTPS viewer origin, simulate an
+unreachable local server, and confirm no recording command uses the public route.

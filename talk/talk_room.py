@@ -652,7 +652,12 @@ async function tick(){
     st.takes.slice().reverse().map(t=>`<tr><td>${t.name}${t.complete?'':' (aborted)'}</td><td>${t.secs}s</td><td>${t.peak??''}</td><td style="color:${t.res==='3840x2160'?'inherit':'var(--warn)'}">${t.res}</td></tr>`).join('');
 }
 setInterval(tick,200);tick();
-if(!{{AUDIO}})setInterval(()=>{if(st.phone)document.getElementById('preview').src='/room/talk/preview.jpg?'+Date.now();},700);
+let previewBusy=false,previewUrl=null;
+if(!{{AUDIO}})setInterval(async()=>{if(!st.phone||previewBusy)return;previewBusy=true;try{
+ const r=await fetch('/room/talk/preview.jpg');if(!r.ok)return;
+ const url=URL.createObjectURL(await r.blob());document.getElementById('preview').src=url;
+ if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=url;
+}catch(e){}finally{previewBusy=false;}},700);
 const earsel=document.getElementById('earsel');const SILENT_NAME={{SILENTJSON}};
 async function loadOutputs(rescan){
   if(rescan)await post('rescan');

@@ -390,8 +390,15 @@ start the original at <input id="start" type="number" step="0.5" style="width:80
 Scroll up during a take undoes a line mark. Over the lyrics, the wheel scrolls them while idle.</div>
 <div class="lyrics" id="lyr">LYRICS</div>
 </div><script>
+async function loadTake(button,name){
+ button.disabled=true;
+ try{const r=await fetch('/room/sing/take/'+name+'.wav');if(!r.ok)throw Error('Playback unavailable');
+ const audio=button.nextElementSibling;const url=URL.createObjectURL(await r.blob());audio.src=url;button.remove();
+ addEventListener('unload',()=>URL.revokeObjectURL(url),{once:true});
+ }catch(e){button.disabled=false;document.getElementById('note').textContent=e.message;}
+}
 const labels={idle:'Start take',rolling:'Start guide',singing:'Next line',marking:'Next line',preview:'Start take'};
-async function post(a,b={}){await fetch('/room/sing/'+a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});tick()}
+async function post(a,b={}){const r=await fetch('/room/sing/'+a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok){document.getElementById('note').textContent=(await r.json()).error;return;}tick()}
 let lastWheel=0;
 let stage='idle';
 // The wheel is a remote only while a take (or line marking) is running; otherwise it just scrolls the page.
@@ -427,7 +434,7 @@ async function tick(){const s=await (await fetch('/room/sing/state')).json(); st
  document.getElementById('ear').value=s.ear||'';
  const tk=JSON.stringify(s.takes); if(tk!=lastTakes){lastTakes=tk;
  document.getElementById('takes').innerHTML=s.takes.map(t=>`<div class="take"><b>${t.name}</b> ${t.seconds.toFixed(0)} s,
-  peak ${t.peak} dB, ${t.guide} <audio controls src="/room/sing/take/${t.name}.wav" preload="none"></audio>
+  peak ${t.peak} dB, ${t.guide} <button onclick="loadTake(this,'${t.name}')">Load playback</button><audio controls preload="none"></audio>
   <button onclick="post('use',{name:'${t.name}'})">Use for video</button>
   <button onclick="post('delete',{name:'${t.name}'})">Delete</button></div>`).join('');}}
 setInterval(tick,250);tick();
