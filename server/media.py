@@ -1,6 +1,7 @@
 """Bounded-memory file streaming, byte ranges, and a disk-backed 16-bit WAV cache."""
 import io
 import mimetypes
+import os
 import re
 import tempfile
 import threading
@@ -12,11 +13,11 @@ _lock = threading.Lock()
 _cache_dir = None
 
 
-def _open_playable(path):
+def _open_playable(source):
+    """Convert an opened WAV without resolving or reopening its pathname."""
     global _cache_dir
-    path = Path(path).resolve()
-    stat = path.stat()
-    key = (path, stat.st_mtime_ns, stat.st_size)
+    stat = os.fstat(source.fileno())
+    key = (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
     with _lock:
         if key not in _cache:
             import soundfile as sf  # No audio/device dependencies on viewer startup.
@@ -25,10 +26,10 @@ def _open_playable(path):
             with tempfile.NamedTemporaryFile(dir=_cache_dir.name, suffix=".wav", delete=False) as tmp:
                 output = Path(tmp.name)
             try:
-                with sf.SoundFile(path) as source, sf.SoundFile(
-                        output, mode="w", samplerate=source.samplerate,
-                        channels=source.channels, format="WAV", subtype="PCM_16") as dest:
-                    for block in source.blocks(blocksize=65536, dtype="float32"):
+                with sf.SoundFile(source) as wav, sf.SoundFile(
+                        output, mode="w", samplerate=wav.samplerate,
+                        channels=wav.channels, format="WAV", subtype="PCM_16") as dest:
+                    for block in wav.blocks(blocksize=65536, dtype="float32"):
                         dest.write(block)
             except Exception:
                 output.unlink()
@@ -43,8 +44,8 @@ def _open_playable(path):
 
 def playable(path):
     """Compatibility for the singing studio: return the take as 16-bit WAV bytes."""
-    with _open_playable(path) as source:
-        return source.read()
+    with Path(path).open("rb") as source, _open_playable(source) as converted:
+        return converted.read()
 
 
 def byte_range(value, size):
@@ -104,7 +105,15 @@ def _send_audio(handler, data):
     _send_stream(handler, io.BytesIO(data), "audio/wav")
 
 
+def send_wav(handler, source):
+    """Convert and stream an opened WAV; the caller owns the input file."""
+    with _open_playable(source) as converted:
+        _send_stream(handler, converted, "audio/wav")
+
+
 def send_file(handler, path):
-    source = _open_playable(path) if path.suffix == ".wav" else path.open("rb")
-    with source:
-        _send_stream(handler, source, mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+    with path.open("rb") as source:
+        if path.suffix == ".wav":
+            send_wav(handler, source)
+        else:
+            _send_stream(handler, source, mimetypes.guess_type(path.name)[0] or "application/octet-stream")

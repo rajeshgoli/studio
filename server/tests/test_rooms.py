@@ -1,16 +1,19 @@
 """HTTP checks with real take files and stand-in streams; never touches Mac devices."""
 import http.client
+import io
 import json
 import tempfile
 import threading
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import soundfile as sf
 
+from server import media
 from server.app import StudioServer
 from server.rooms import legacy_running
 from songs.sing_room import RATE, Studio, make_page
@@ -112,6 +115,8 @@ class RoomTest(unittest.TestCase):
         self.assertAlmostEqual(float(abs(y).max()), .2, places=5)
         self.assertFalse(self.server.busy)
         self.assertEqual(self.request('/room/sing/take/take01.wav')[0], 200)
+        self.assertEqual(self.request('/room/sing/take/take01.wav', headers={'Range': 'bytes=0-3'}),
+                         (206, b'RIFF'))
         self.assertEqual(self.post('use', {'name': 'take01'}), 200)
         marks = json.loads((self.folder / 'marks.json').read_text())
         self.assertEqual(marks['guide_sa_hz'], 204)
@@ -123,6 +128,78 @@ class RoomTest(unittest.TestCase):
         self.assertTrue(all(s.closed for s in Stream.instances))
         self.assertFalse(room.watchdog.is_alive())
         self.assertFalse(room.writer.is_alive())
+
+    def check_stalled_playback(self, phase):
+        room = self.open()
+        take = room.takes_dir / 'take01.wav'
+        sf.write(take, np.full(480, .25), RATE, subtype='PCM_24')
+        take.with_suffix('.json').write_text(json.dumps(dict(seconds=.01, peak_dbfs=-12, guide='both')))
+        stalled, resume = threading.Event(), threading.Event()
+        sources = []
+        original_open = media._open_playable
+        original_stream = media._send_stream
+
+        def wait_for_resume():
+            stalled.set()
+            if not resume.wait(10):
+                raise TimeoutError('test did not release playback')
+
+        def open_playable(source):
+            sources.append(source)
+            if phase == 'conversion':
+                wait_for_resume()
+            return original_open(source)
+
+        def send_stream(handler, source, ctype):
+            # Stop at a real response-body write, as with a client that stops reading.
+            original_write = handler.wfile.write
+            def write(data):
+                if data[:4] == b'RIFF':
+                    wait_for_resume()
+                return original_write(data)
+            if phase == 'streaming':
+                handler.wfile.write = write
+            return original_stream(handler, source, ctype)
+
+        def controls():
+            room.mic.feed(480)
+            self.assertEqual(self.post('step'), 200)  # start recording
+            self.assertEqual(self.post('step'), 200)  # start the guide
+            self.assertEqual(self.post('step'), 200)  # mark the line
+            self.assertEqual(room.line, 0)
+            self.assertTrue(json.loads(self.request('/api/busy')[1])['busy'])
+            self.assertEqual(json.loads(self.request('/api/status')[1])['stage'], 'singing')
+            self.assertEqual(self.post('abort'), 200)
+            self.assertFalse(json.loads(self.request('/api/busy')[1])['busy'])
+            self.assertEqual(json.loads(self.request('/room/sing/state')[1])['stage'], 'idle')
+            # Move away the opened take, close the room, and reuse its old pathname.
+            self.assertEqual(self.post('delete', {'name': 'take01'}), 200)
+            self.assertEqual(self.request('/room/close', {})[0], 200)
+            self.open()
+            sf.write(take, np.full(960, -.5), RATE, subtype='PCM_24')
+
+        with patch('server.media._open_playable', side_effect=open_playable), \
+                patch('server.media._send_stream', side_effect=send_stream), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            playback = pool.submit(self.request, '/room/sing/take/take01.wav')
+            try:
+                self.assertTrue(stalled.wait(3), 'playback never reached the stall')
+                pool.submit(controls).result(timeout=3)
+            finally:
+                resume.set()
+            status, body = playback.result(timeout=3)
+        self.assertEqual(status, 200)
+        samples, rate = sf.read(io.BytesIO(body))
+        self.assertEqual((len(samples), rate), (480, RATE))
+        np.testing.assert_allclose(samples, .25, atol=1 / 32768)
+        self.assertTrue(sources)
+        self.assertTrue(all(source.closed for source in sources))
+
+    def test_controls_during_stalled_conversion(self):
+        self.check_stalled_playback('conversion')
+
+    def test_controls_during_stalled_streaming(self):
+        self.check_stalled_playback('streaming')
 
     def test_guards_validation_and_exclusivity(self):
         for h in ({'Host': 'studio.example'}, {'Cf-Ray': 'test'}):

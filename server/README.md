@@ -43,8 +43,9 @@ in `thumbnails/` are allowed. Extensions are `.wav .mp3 .m4a .mp4 .png .jpg .jso
 Hidden paths, deleted takes, intermediate build folders, and escapes are denied.
 
 WAV files are converted to 16-bit samples for browser compatibility, in chunks,
-with an eight-file temporary disk cache keyed by resolved path, modification time,
-and size. Other media streams directly from disk. The old singing studio imports
+with an eight-file temporary disk cache keyed by the opened file's identity,
+modification/change times, and size. Other media streams directly from disk.
+The old singing studio imports
 `playable` and `_send_audio` from this package and retains its existing launcher.
 
 ## Access configuration
@@ -120,6 +121,9 @@ All POSTs require `Content-Type: application/json` and an Origin matching the
 local Host, including its port. Another open room or a listener on port 9400
 prevents opening. Preview, recording and marking keep the server busy; closing
 an idle room releases the devices and stops its background threads.
+Take playback opens the validated file while holding the room lock, then converts
+and streams it after releasing the lock. A slow playback client does not delay
+recording controls; moving a take or closing the room cannot redirect that playback.
 
 Room regression tests use stand-in streams, a temporary song and an ephemeral
 local port, without touching hardware:

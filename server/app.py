@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
 from .guards import AccessGuard, access_guard, local_guard, origin_guard
-from .media import send_file
+from .media import send_file, send_wav
 from .rooms import RoomConflict, open_singing, take_path, command
 from .productions import Productions
 from .jobs import Jobs, QueueUnavailable
@@ -133,6 +133,7 @@ class Handler(BaseHTTPRequestHandler):
                                       stage=room.active_stage if room else "idle")
                 self._send(result)
             elif path.startswith("/room/sing/"):
+                source = None
                 with self.server._lock:
                     room = self.server.room
                     if room is None:
@@ -146,9 +147,13 @@ class Handler(BaseHTTPRequestHandler):
                     elif route == "outputs":
                         self._send(room.outputs())
                     elif route.startswith("take/") and route.endswith(".wav"):
-                        send_file(self, take_path(room, route[5:-4]))
+                        # Pin the validated take before close/delete can change the room.
+                        source = take_path(room, route[5:-4]).open("rb")
                     else:
                         raise FileNotFoundError()
+                if source is not None:
+                    with source:
+                        send_wav(self, source)
             elif path == "/api/productions":
                 self._send(self.server.productions.list())
             elif path in {"/", "/jobs"}:
