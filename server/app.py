@@ -14,6 +14,7 @@ from .rooms import RoomConflict, open_singing, take_path, command, open_talking,
 from .productions import Productions
 from .jobs import Jobs, QueueUnavailable
 from .viewer import page, song
+from .talk_viewer import Talks
 
 
 class StudioServer(ThreadingHTTPServer):
@@ -177,6 +178,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(self.server.productions.list())
             elif path in {"/", "/jobs"}:
                 self._send(page(), "text/html; charset=utf-8")
+            elif path.startswith("/talk/"):
+                Talks(self.server.productions.root).config(unquote(path[len("/talk/"):]))
+                self._send(page(), "text/html; charset=utf-8")
+            elif path.startswith("/api/talk/"):
+                self._send(Talks(self.server.productions.root).detail(unquote(path[len("/api/talk/"):])))
+            elif path.startswith("/file/talk:"):
+                pid, relative = unquote(path[len("/file/talk:"):], errors="strict").split("/", 1)
+                send_file(self, Talks(self.server.productions.root).file(pid, relative))
             elif path.startswith("/song/"):
                 self.server.productions.song_dir(unquote(path[len("/song/"):]))
                 self._send(page(), "text/html; charset=utf-8")

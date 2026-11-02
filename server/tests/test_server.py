@@ -166,6 +166,20 @@ class ServerTest(unittest.TestCase):
         with patch.object(self.server.jobs, 'list', side_effect=QueueUnavailable('Queue offline')):
             self.assertEqual(self.request('/api/jobs')[0], 503)
 
+    def test_talk_routes(self):
+        folder = self.root / 'talks/sample'
+        (folder / 'takes').mkdir(parents=True)
+        (folder / 'production.json').write_text(json.dumps(dict(parts=['intro'], camera_parts=['intro'])))
+        (folder / 'takes/take01_phone.mp4').write_bytes(b'0123456789')
+        for path in ('/talk/sample', '/api/talk/sample', '/file/talk:sample/takes/take01_phone.mp4'):
+            self.assertEqual(self.request(path)[0], 200)
+            self.assertEqual(self.request(path, headers={'Cf-Ray': 'remote'})[0], 403)
+            with patch.object(self.server, 'access', return_value=True):
+                self.assertEqual(self.request(path, headers={'Cf-Ray': 'remote'})[0], 200)
+        self.assertEqual(self.request('/file/talk:sample/takes/take01_phone.mp4', headers={'Range': 'bytes=2-4'})[2], b'234')
+        for path in ('/talk/missing', '/api/talk/missing', '/file/talk:sample/production.json', '/file/talk:sample/build/private.mp4'):
+            self.assertEqual(self.request(path)[0], 404)
+
     def test_post_checks(self):
         self.assertEqual(self.request('/room/open', 'POST')[0], 403)
         h = {'Origin': f'http://127.0.0.1:{self.server.server_port}', 'Content-Type': 'application/json'}

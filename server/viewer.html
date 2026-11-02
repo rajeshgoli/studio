@@ -43,6 +43,15 @@ if(route==='/'){
  changed('publishing',s.publishing,p=>p.text?`<div class="card">${['title','description'].filter(k=>p[k]).map(k=>`<button type="button" data-copy="${k}">Copy ${k}</button> `).join('')}<span class="copy-status" role="status"></span><pre>${esc(p.text)}</pre></div>`:'<p>No publishing text yet.</p>');
  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{const status=document.querySelector('.copy-status');try{await navigator.clipboard.writeText(s.publishing[b.dataset.copy]);status.textContent='Copied '+b.dataset.copy+'.';}catch{status.textContent='Copy unavailable here. Select and copy the text below.';}});
  };
+ }else if(route.startsWith('/talk/')){
+ const pid=decodeURIComponent(route.slice(6));
+ document.querySelector('#subtitle').textContent='Talking video · recordings, renders and publishing text';
+ for(const [id,label] of [['takes','Takes by part'],['renders','Renders & shorts'],['publishing','Publishing text']])section(id,label);
+ update=async()=>{const t=await get('/api/talk/'+encodeURIComponent(pid));title.textContent=t.title;document.title=t.title+' · Studio';
+ changed('takes',t.parts,parts=>parts.map(p=>`<h3>${esc(p.name)}</h3><div class="grid">${p.takes.map(t=>`<article class="card"><h3>${esc(t.name)}</h3>${t.mic?`<p>Microphone recording</p>${media(t.mic)}`:''}${t.phone?`<p>Phone video</p>${media(t.phone)}`:''}</article>`).join('')||'<p>No saved takes yet.</p>'}</div>`).join(''));
+ changed('renders',t.renders,rows=>`<div class="grid">${rows.map(assetCard).join('')||'<p>No renders yet.</p>'}</div>`);
+ changed('publishing',t.publishing,p=>p.text?`<div class="card"><pre>${esc(p.text)}</pre></div>`:'<p>No publishing text yet.</p>');
+ };
 }else if(route==='/jobs'){
  title.textContent='Jobs';document.title='Jobs · Studio';document.querySelector('#subtitle').textContent='Work running on the Mac, and recent results.';
  content.innerHTML='<label><input id="show-all" type="checkbox">Show all jobs</label><p class="muted">Newest 50 jobs. Studio labels: song-, talk-, demucs-, sing-studio and magnetar.</p>';
