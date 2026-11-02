@@ -191,3 +191,20 @@ Checks: `python -m unittest server.tests.test_local_connection` and
 `PLAYWRIGHT_MODULE` and `STUDIO_TEST_PYTHON`). Browser checks use disposable content
 and stand-in devices, verify both rooms under an HTTPS viewer origin, simulate an
 unreachable local server, and confirm no recording command uses the public route.
+
+
+Opening a recording room switches to a dedicated full-window screen. The viewer,
+production cards and outer page scroll are hidden while the room is shown. A
+compact toolbar offers **Back to productions** (keeps the idle room open) and
+**Close room** (releases devices). Both are disabled during an active take or
+preview; returning also rechecks the server before leaving. **Return to room**
+opens the recording screen again. The singing room keeps wheel recording controls,
+while idle/preview wheel input over lyrics or saved takes scrolls those lists.
+
+
+The singing workspace separates **Record**, **Setup**, and **Saved takes**. The
+Record view keeps lyrics and the primary action in the viewport; Setup holds guide
+and earbud controls, and Saved takes holds playback and selection. Recording
+wheel/keyboard shortcuts do not run in Setup or Saved takes, or on form controls.
+Tabs are disabled during recording or line marking; a recording started elsewhere
+returns this page to Record. Lyrics scroll normally while idle or previewing.

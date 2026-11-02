@@ -350,45 +350,38 @@ class Studio(Devices):
 
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Singing Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-html,body{height:100%;overflow:hidden}
-body{margin:0;background:#120d18;color:#f3e9d6;font:18px/1.4 "Avenir Next",sans-serif}
-.wrap{max-width:900px;margin:0 auto;padding:18px 24px;height:100%;box-sizing:border-box;display:flex;flex-direction:column}
-#lyr{flex:1;overflow-y:auto;min-height:120px}
-#takes{max-height:22vh;overflow-y:auto}
-.hint{color:#998;font-size:14px}
-h1{font:600 26px "Hoefler Text",serif;color:#e8c27a;margin:0 0 4px}
-.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
-button{background:#2a2036;color:#f3e9d6;border:1px solid #e8c27a66;border-radius:10px;padding:10px 16px;font-size:17px;cursor:pointer}
-button.big{background:#e8c27a;color:#1a1020;font-weight:700;font-size:22px;padding:16px 28px}
-select,input{background:#2a2036;color:#f3e9d6;border:1px solid #555;border-radius:8px;padding:8px;font-size:16px}
-#meter{height:14px;background:#2a2036;border-radius:7px;overflow:hidden;width:320px}
-#bar{height:100%;background:linear-gradient(90deg,#6c6,#ec6,#e66);width:0}
-#note{color:#e8c27a;min-height:1.4em}
-.stage{font-size:30px;font-weight:700}
-.lyrics{margin-top:20px;border-top:1px solid #e8c27a33;padding-top:12px}
-.l{margin:10px 0;padding:6px 12px;border-radius:10px;opacity:.55}.l.on{opacity:1;background:#2a2036;box-shadow:0 0 0 1px #e8c27a88}.l .t{font:italic 24px "Hoefler Text",serif}.l .m{color:#bba;font-size:15px}
-.take{display:flex;gap:10px;align-items:center;margin:4px 0}
+:root{color-scheme:dark;--bg:#121216;--panel:#1c1c23;--line:#35343f;--ink:#f4f0e8;--muted:#aaa6b4;--gold:#eccb87}
+*{box-sizing:border-box}html,body{height:100%;overflow:hidden}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+.wrap{height:100%;max-width:1200px;margin:auto;display:flex;flex-direction:column;padding:20px 32px;gap:12px;min-height:0}
+header{display:flex;justify-content:space-between;gap:24px;align-items:center;flex-shrink:0}h1{font:600 24px/1.2 Georgia,serif;margin:0;color:var(--gold)}.eyebrow{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+nav{display:flex;gap:6px}button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:10px 16px;cursor:pointer;min-height:44px}button:hover{border-color:var(--gold)}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:3px}button:disabled{opacity:.4;cursor:not-allowed}nav button[aria-selected=true]{color:var(--gold);border-color:var(--gold)}
+.statusbar{display:flex;gap:12px;align-items:center;flex-shrink:0;color:var(--muted);font-size:13px}.stage{color:var(--ink);font-weight:600;text-transform:capitalize}#meter{height:6px;background:var(--line);border-radius:4px;overflow:hidden;width:130px}#bar{height:100%;background:var(--gold);width:0}#note{font-size:13px;color:var(--muted);min-height:20px;margin:0;flex-shrink:0}
+.pane{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}.pane[hidden]{display:none}#record-pane{display:flex;flex-direction:column;overflow:hidden}#record-pane[hidden]{display:none}#lyr{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 0}.l{margin:0 0 24px;padding:16px 20px;border-radius:12px;color:var(--muted)}.l.on{background:var(--panel);box-shadow:inset 3px 0 var(--gold);color:var(--ink)}.l .t{font:italic clamp(22px,2.4vw,32px)/1.45 Georgia,serif}.l .m{font-size:16px;margin-top:6px;color:var(--muted)}
+.controls{border-top:1px solid var(--line);padding-top:16px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}button.big{background:var(--gold);color:#17151a;font-weight:700;border-color:var(--gold);min-width:170px}.hint{color:var(--muted);font-size:12px;margin:8px 0 0;flex-shrink:0}
+.settings{max-width:720px;margin:12px auto;padding:20px;background:var(--panel);border:1px solid var(--line);border-radius:12px}.settings h2{font-size:18px;margin:0 0 16px}.field{display:grid;grid-template-columns:170px 1fr;gap:16px;align-items:center;margin:18px 0}.field label{color:var(--muted)}select,input{font:inherit;max-width:100%;min-width:0;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}input[type=range]{accent-color:var(--gold);width:100%}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}#takes{height:100%;overflow:auto;overscroll-behavior:contain;padding:12px 0}.take{padding:18px;margin:0 0 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}audio{max-width:100%;height:40px}.empty{color:var(--muted);padding:40px 20px;text-align:center}
+@media(max-width:700px){.wrap{padding:12px;gap:8px}header{gap:10px;align-items:start;flex-direction:column}h1{font-size:20px}.field{grid-template-columns:1fr;gap:4px}.l{padding:10px}.controls{gap:6px;padding-top:10px}button{padding:8px 12px}.statusbar{gap:8px}#meter{width:80px}}
 </style></head><body><div class="wrap">
-<h1>Singing Studio · TITLE</h1>
-<div class="row"><span class="stage" id="stage">idle</span><span id="secs"></span>
-<div id="meter"><div id="bar"></div></div><span id="lvl"></span></div>
-<div id="note"></div>
-<div class="row"><button class="big" id="go" onclick="post('step')">Start take</button>
-<button id="pv" onclick="post('preview')">Preview guide</button><button onclick="post('abort')">Abort (Esc)</button><button onclick="post('mark')">Mark lines on vocals.wav</button><button onclick="post('beep')">Test beep (T)</button></div>
-<div class="row">Guide <select id="mode" onchange="post('set',{mode:this.value})">
-<option value="both">Original + tanpura</option><option value="original">Original only</option>
-<option value="karaoke+tanpura">Karaoke (voice removed) + tanpura</option><option value="karaoke">Karaoke only</option>
-<option value="tanpura">Tanpura only</option></select>
-original level <input id="mix" type="range" min="0.2" max="1" step="0.05" onchange="post('set',{mix:+this.value})">
-start the original at <input id="start" type="number" step="0.5" style="width:80px" onchange="post('set',{start_at:+this.value})"> s</div>
-<div class="row">Earbud <select id="ear" onchange="post('ear',{name:this.value})"></select>
-<button onclick="post('rescan')">Rescan devices</button> volume
-<input type="range" min="0.1" max="1.5" step="0.05" value="1" onchange="post('set',{gain:+this.value})"></div>
-<div id="takes"></div>
-<div class="hint">Scroll down anywhere outside the lyrics to step: start take → start guide → each line → stop.
-Scroll up during a take undoes a line mark. Over the lyrics, the wheel scrolls them while idle.</div>
+<header><div><div class="eyebrow">Singing room</div><h1>Singing Studio · TITLE</h1></div>
+<nav aria-label="Singing workspace" role="tablist"><button role="tab" aria-selected="true" data-pane="record">Record</button><button role="tab" aria-selected="false" data-pane="setup">Setup</button><button role="tab" aria-selected="false" data-pane="takes">Saved takes</button></nav></header>
+<div class="statusbar"><span class="stage" id="stage">idle</span><span id="secs"></span><span>Microphone</span><div id="meter"><div id="bar"></div></div><span id="lvl"></span></div>
+<p id="note" role="status"></p>
+<section class="pane" id="record-pane" aria-label="Record">
 <div class="lyrics" id="lyr">LYRICS</div>
+<div class="controls"><button class="big" id="go" onclick="post('step')">Start take</button><button id="pv" onclick="post('preview')">Preview guide</button><button id="abort" onclick="post('abort')">Abort (Esc)</button></div>
+<p class="hint">Wheel on the recording surface: start → guide → mark each line → stop. Wheel up undoes a mark.<br>While idle, scroll over the lyrics to read them. Enter / arrow keys also control the take.</p>
+</section>
+<section class="pane" id="setup-pane" aria-label="Setup" hidden><div class="settings"><h2>What you hear</h2>
+<div class="field"><label for="mode">Guide</label><select id="mode" onchange="post('set',{mode:this.value})"><option value="both">Original + tanpura</option><option value="original">Original only</option><option value="karaoke+tanpura">Karaoke + tanpura</option><option value="karaoke">Karaoke only</option><option value="tanpura">Tanpura only</option></select></div>
+<p class="hint">Tanpura is a steady home-note guide. Karaoke removes the original singer.</p>
+<div class="field"><label for="mix">Original level</label><input id="mix" type="range" min="0.2" max="1" step="0.05" onchange="post('set',{mix:+this.value})"></div>
+<div class="field"><label for="start">Guide starts at (seconds)</label><input id="start" type="number" step="0.5" onchange="post('set',{start_at:+this.value})"></div>
+<div class="field"><label for="ear">Earbuds</label><select id="ear" onchange="post('ear',{name:this.value})"></select></div>
+<div class="field"><label for="volume">Earbud volume</label><input id="volume" type="range" min="0.1" max="1.5" step="0.05" value="1" onchange="post('set',{gain:+this.value})"></div>
+<div class="row"><button onclick="post('rescan')">Rescan devices</button><button onclick="post('beep')">Test beep</button></div></div>
+<div class="settings"><h2>Existing vocal</h2><p class="hint">Play the voice already selected for the video and mark where each line starts.</p><button onclick="showPane('record');post('mark')">Mark lines on vocals.wav</button></div></section>
+<section class="pane" id="takes-pane" aria-label="Saved takes" hidden><div id="takes"></div></section>
 </div><script>
 async function loadTake(button,name){
  button.disabled=true;
@@ -400,22 +393,39 @@ async function loadTake(button,name){
 const labels={idle:'Start take',rolling:'Start guide',singing:'Next line',marking:'Next line',preview:'Start take'};
 async function post(a,b={}){const r=await fetch('/room/sing/'+a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok){document.getElementById('note').textContent=(await r.json()).error;return;}tick()}
 let lastWheel=0;
-let stage='idle';
-// The wheel is a remote only while a take (or line marking) is running; otherwise it just scrolls the page.
+let stage='idle', pane='record';
+function showPane(name){
+ if(!['idle','preview'].includes(stage)&&name!=='record')return;
+ pane=name;
+ document.querySelectorAll('[data-pane]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.pane===name)));
+ for(const n of ['record','setup','takes'])document.getElementById(n+'-pane').hidden=n!==name;
+}
+document.querySelectorAll('[data-pane]').forEach(b=>b.onclick=()=>showPane(b.dataset.pane));
 // The wheel is the remote (a click would be heard on the take). The page itself never scrolls; while idle, the
-// wheel over the lyrics box scrolls the lyrics, and anywhere else it is the next step (starting with Start take).
+// wheel over lyrics or saved takes scrolls that list; elsewhere it starts a take.
 addEventListener('wheel',e=>{
- const overLyrics=document.getElementById('lyr').contains(e.target);
- if((stage=='idle'||stage=='preview')&&overLyrics)return;
+ if(pane!=='record'||e.target.closest('button,select,input,nav'))return;
+ const browsing=document.getElementById('lyr').contains(e.target);
+ if((stage=='idle'||stage=='preview')&&browsing)return;
  e.preventDefault();
  if(Math.abs(e.deltaY)>30&&Date.now()-lastWheel>600){lastWheel=Date.now();
   const busy=['rolling','singing','marking'].includes(stage);
   if(e.deltaY>0)post('step'); else if(busy)post('back');}},{passive:false});
-addEventListener('keydown',e=>{if(e.target.tagName=='INPUT')return;
+addEventListener('keydown',e=>{
+ if(pane!=='record')return;
+ if(e.key==='Escape'){e.preventDefault();post('abort');return;}
+ if(e.target.closest('input,select,textarea,a')||e.target.isContentEditable)return;
+ // Enter on a button uses its native click once. Recording buttons retain
+ // Escape/arrow shortcuts after a click; navigation buttons do not record.
+ if(e.target.closest('button')&&(e.key==='Enter'||!e.target.closest('.controls')))return;
  if(e.key=='Enter'||e.key=='ArrowRight'){e.preventDefault();post('step')}
  if(e.key=='ArrowLeft')post('back'); if(e.key=='Escape')post('abort'); if(e.key=='t'||e.key=='T')post('beep')});
 let outs=null, lastTakes='';
 async function tick(){const s=await (await fetch('/room/sing/state')).json(); stage=s.stage;
+ const busy=!['idle','preview'].includes(stage);
+ document.querySelectorAll('[data-pane]').forEach(b=>b.disabled=busy);
+ if(busy&&pane!=='record')showPane('record');
+ document.getElementById('abort').disabled=stage==='idle';
  document.getElementById('pv').textContent=s.stage=='preview'?'Stop preview':'Preview guide';
  document.getElementById('stage').textContent=s.stage+(s.mic_ok?'':' · mic not sending');
  document.getElementById('go').textContent=(s.stage=='singing'||s.stage=='marking')&&s.line==N-1?'Stop':labels[s.stage];
@@ -436,7 +446,7 @@ async function tick(){const s=await (await fetch('/room/sing/state')).json(); st
  document.getElementById('takes').innerHTML=s.takes.map(t=>`<div class="take"><b>${t.name}</b> ${t.seconds.toFixed(0)} s,
   peak ${t.peak} dB, ${t.guide} <button onclick="loadTake(this,'${t.name}')">Load playback</button><audio controls preload="none"></audio>
   <button onclick="post('use',{name:'${t.name}'})">Use for video</button>
-  <button onclick="post('delete',{name:'${t.name}'})">Delete</button></div>`).join('');}}
+  <button onclick="post('delete',{name:'${t.name}'})">Delete</button></div>`).join('')||'<p class="empty">No saved takes yet. Record a take to review it here.</p>';}}
 setInterval(tick,250);tick();
 </script></body></html>"""
 
