@@ -1,5 +1,4 @@
 """Read-only routes and lifecycle. Rooms will extend this foundation later."""
-import html
 import json
 import threading
 import time
@@ -9,6 +8,8 @@ from urllib.parse import unquote, urlsplit
 from .guards import AccessGuard, access_guard, local_guard, origin_guard
 from .media import send_file
 from .productions import Productions
+from .jobs import Jobs, QueueUnavailable
+from .viewer import page, song
 
 
 class StudioServer(ThreadingHTTPServer):
@@ -17,6 +18,7 @@ class StudioServer(ThreadingHTTPServer):
     def __init__(self, address=("127.0.0.1", 8450), *, content=None, config=None,
                  idle_exit_secs=3600, listener=None):
         self.productions = Productions(content)
+        self.jobs = Jobs()
         self.access = AccessGuard(config)
         self.idle_exit_secs = idle_exit_secs
         self._lock = threading.Lock()
@@ -113,19 +115,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(result)
             elif path == "/api/productions":
                 self._send(self.server.productions.list())
-            elif path == "/":
-                rows = "".join(f'<li>{html.escape(p["title"])} <small>({html.escape(p["id"])})</small></li>'
-                               for p in self.server.productions.list())
-                self._send('<!doctype html><html lang="en"><meta charset="utf-8">'
-                           '<meta name="viewport" content="width=device-width,initial-scale=1">'
-                           '<title>Studio</title><body><h1>Studio</h1><h2>Songs</h2>'
-                           + (f'<ul>{rows}</ul>' if rows else '<p>No songs yet.</p>')
-                           + '</body></html>', "text/html; charset=utf-8")
+            elif path in {"/", "/jobs"}:
+                self._send(page(), "text/html; charset=utf-8")
+            elif path.startswith("/song/"):
+                self.server.productions.song_dir(unquote(path[len("/song/"):]))
+                self._send(page(), "text/html; charset=utf-8")
+            elif path.startswith("/api/song/"):
+                self._send(song(self.server.productions, unquote(path[len("/api/song/"):])))
+            elif path == "/api/jobs":
+                self._send(self.server.jobs.list())
+            elif path.startswith("/api/jobs/") and path.endswith("/log"):
+                job = unquote(path[len("/api/jobs/"):-len("/log")])
+                self._send({"log": self.server.jobs.log(job)})
             elif path.startswith("/file/"):
                 pid, relative = unquote(path[len("/file/"):], errors="strict").split("/", 1)
                 send_file(self, self.server.productions.file(pid, relative))
             else:
                 self._send({"error": "not found"}, status=404)
+        except QueueUnavailable as exc:
+            self._send({"error": str(exc)}, status=503)
         except (OSError, ValueError, UnicodeError):
             self._send({"error": "not found"}, status=404)
 

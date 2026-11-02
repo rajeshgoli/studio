@@ -4,6 +4,8 @@ import os
 import re
 from pathlib import Path
 
+from .viewer import renders
+
 ID = re.compile(r"[a-z0-9_]{1,64}")
 EXTENSIONS = {".wav", ".mp3", ".m4a", ".mp4", ".png", ".jpg", ".json", ".md"}
 TOP_FILES = {"vocals.wav", "poem.json", "marks.json", "timing.json", "youtube.md"}
@@ -35,7 +37,9 @@ class Productions:
                 folder = self.song_dir(path.parent.name)
                 poem = json.loads((folder / "poem.json").read_text())
                 title = poem.get("title", folder.name)
-                result.append({"id": folder.name, "kind": "song", "title": str(title)})
+                media = renders(self, folder.name)
+                result.append({"id": folder.name, "kind": "song", "title": str(title),
+                               "newest_render": media[0] if media else None})
             except (OSError, ValueError, AttributeError):
                 continue
         return result
