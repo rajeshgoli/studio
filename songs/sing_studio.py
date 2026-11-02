@@ -24,7 +24,7 @@ Run:  .venv/bin/python sing_studio.py <song> [--ear EarFun] [--mic fifine]   the
 """
 
 import argparse
-import io
+import sys
 import json
 import queue
 import shutil
@@ -32,6 +32,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from server.media import playable, _send_audio
 
 import librosa
 import numpy as np
@@ -492,20 +495,6 @@ setInterval(tick,250);tick();
 </script></body></html>"""
 
 
-_playable = {}
-
-
-def playable(path):
-    """The take as 16-bit WAV (browsers won't all play 24-bit), cached until the file changes."""
-    key = (path, path.stat().st_mtime)
-    if key not in _playable:
-        y, sr = sf.read(path, dtype="float32")
-        buf = io.BytesIO()
-        sf.write(buf, y, sr, format="WAV", subtype="PCM_16")
-        _playable[key] = buf.getvalue()
-    return _playable[key]
-
-
 def make_page(studio):
     p = studio.poem
     lines = {l["id"]: l for l in p["lines"]}
@@ -532,24 +521,7 @@ def make_handler(studio):
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_audio(self, data):
-            """Browsers (Safari especially) only play media from servers that answer Range requests."""
-            rng = self.headers.get("Range")
-            if rng and rng.startswith("bytes="):
-                a, _, b = rng[6:].partition("-")
-                a = int(a or 0)
-                b = min(int(b) if b else len(data) - 1, len(data) - 1)
-                self.send_response(206)
-                self.send_header("Content-Range", f"bytes {a}-{b}/{len(data)}")
-                chunk = data[a:b + 1]
-            else:
-                self.send_response(200)
-                chunk = data
-            self.send_header("Content-Type", "audio/wav")
-            self.send_header("Accept-Ranges", "bytes")
-            self.send_header("Content-Length", str(len(chunk)))
-            self.end_headers()
-            self.wfile.write(chunk)
+        _send_audio = _send_audio
 
         def do_GET(self):
             if self.path == "/":
