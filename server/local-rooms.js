@@ -49,7 +49,7 @@ async function showRoom(){
  let html=await res.text();
  // The trusted room page runs under this page's origin; its requests use the
  // parent's verified direct transport. No credential is placed in a URL.
- const bootstrap='<script>window.fetch=(...a)=>parent.studioFetch(...a);<\/script>';
+ const bootstrap='<script>window.fetch=(...a)=>parent.studioFetch(...a);window.studioRefreshRoom=()=>parent.studioRefreshRoom(window);<\/script>';
  html=html.replace('<head>','<head>'+bootstrap);
  screen.replaceChildren();activeFrame=document.createElement('iframe');
  activeFrame.title=kind==='sing'?'Singing room':'Talking room';
@@ -58,6 +58,7 @@ async function showRoom(){
  message('Connected to this recording Mac · '+(kind==='sing'?'Singing':'Talking')+' room');
  activeFrame.focus();
 }
+window.studioRefreshRoom=source=>{if(source===activeFrame?.contentWindow)return showRoom();};
 async function connect(){
  retry.disabled=true;message('Checking for Studio on this computer…');connection=null;
  try{await credentials();await status();retry.hidden=true;document.querySelector('footer').textContent='Recording connected directly to this Mac · Viewer available on other devices.';}
