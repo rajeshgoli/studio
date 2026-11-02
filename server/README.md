@@ -191,3 +191,12 @@ Checks: `python -m unittest server.tests.test_local_connection` and
 `PLAYWRIGHT_MODULE` and `STUDIO_TEST_PYTHON`). Browser checks use disposable content
 and stand-in devices, verify both rooms under an HTTPS viewer origin, simulate an
 unreachable local server, and confirm no recording command uses the public route.
+
+
+Opening a recording room switches to a dedicated full-window screen. The viewer,
+production cards and outer page scroll are hidden while the room is shown. A
+compact toolbar offers **Back to productions** (keeps the idle room open) and
+**Close room** (releases devices). Both are disabled during an active take or
+preview; returning also rechecks the server before leaving. **Return to room**
+opens the recording screen again. The singing room keeps wheel recording controls,
+while idle/preview wheel input over lyrics or saved takes scrolls those lists.

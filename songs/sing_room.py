@@ -387,7 +387,7 @@ start the original at <input id="start" type="number" step="0.5" style="width:80
 <input type="range" min="0.1" max="1.5" step="0.05" value="1" onchange="post('set',{gain:+this.value})"></div>
 <div id="takes"></div>
 <div class="hint">Scroll down anywhere outside the lyrics to step: start take → start guide → each line → stop.
-Scroll up during a take undoes a line mark. Over the lyrics, the wheel scrolls them while idle.</div>
+Scroll up during a take undoes a line mark. Over lyrics or saved takes, the wheel scrolls the list while idle.</div>
 <div class="lyrics" id="lyr">LYRICS</div>
 </div><script>
 async function loadTake(button,name){
@@ -401,12 +401,11 @@ const labels={idle:'Start take',rolling:'Start guide',singing:'Next line',markin
 async function post(a,b={}){const r=await fetch('/room/sing/'+a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok){document.getElementById('note').textContent=(await r.json()).error;return;}tick()}
 let lastWheel=0;
 let stage='idle';
-// The wheel is a remote only while a take (or line marking) is running; otherwise it just scrolls the page.
 // The wheel is the remote (a click would be heard on the take). The page itself never scrolls; while idle, the
-// wheel over the lyrics box scrolls the lyrics, and anywhere else it is the next step (starting with Start take).
+// wheel over lyrics or saved takes scrolls that list; elsewhere it starts a take.
 addEventListener('wheel',e=>{
- const overLyrics=document.getElementById('lyr').contains(e.target);
- if((stage=='idle'||stage=='preview')&&overLyrics)return;
+ const browsing=document.getElementById('lyr').contains(e.target)||document.getElementById('takes').contains(e.target);
+ if((stage=='idle'||stage=='preview')&&browsing)return;
  e.preventDefault();
  if(Math.abs(e.deltaY)>30&&Date.now()-lastWheel>600){lastWheel=Date.now();
   const busy=['rolling','singing','marking'].includes(stage);
