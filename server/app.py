@@ -6,7 +6,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
-from .guards import AccessGuard, access_guard, local_guard, origin_guard
+from .guards import AccessGuard, access_guard, local_guard, origin_guard, single_header
+from .local_connection import LocalConnection
+from pathlib import Path
 from .media import send_file, send_wav
 from .rooms import RoomConflict, open_singing, take_path, command
 from .media import send_file
@@ -25,6 +27,7 @@ class StudioServer(ThreadingHTTPServer):
         self.productions = Productions(content)
         self.jobs = Jobs()
         self.access = AccessGuard(config)
+        self.local_connection = LocalConnection(self.access.config_path)
         self.idle_exit_secs = idle_exit_secs
         self._lock = threading.RLock()
         self.room = None
@@ -115,8 +118,39 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _direct(self):
+        return self.server.local_connection.authorized(
+            self.client_address[0], self.headers, self.server.server_port)
+
+    def end_headers(self):
+        if self.server.local_connection.route(self.client_address[0], self.headers, self.server.server_port):
+            self.send_header("Access-Control-Allow-Origin", self.server.local_connection.origin())
+            self.send_header("Vary", "Origin")
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        path = urlsplit(self.path).path
+        requested = single_header(self.headers, "Access-Control-Request-Headers") or ""
+        allowed = {"content-type", "x-studio-local"}
+        if (not (path.startswith("/room/") or path in {"/api/status", "/bridge/probe"})
+                or not self.server.local_connection.route(self.client_address[0], self.headers, self.server.server_port)
+                or single_header(self.headers, "Access-Control-Request-Method") not in {"GET", "POST"}
+                or not {v.strip().lower() for v in requested.split(",") if v.strip()} <= allowed):
+            self._send({"error": "forbidden"}, status=403)
+            return
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Studio-Local")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
     def _authorized(self, local_only=False):
         local = local_guard(self.client_address[0], self.headers, self.server.server_port)
+        origin = single_header(self.headers, "Origin")
+        # Cross-origin loopback requests need the short-lived credential even for GET.
+        if local and origin and origin != "http://" + (single_header(self.headers, "Host") or ""):
+            local = self._direct()
         if local or (not local_only and access_guard(self.headers, self.server.access)):
             return True
         self._send({"error": "forbidden"}, status=403)
@@ -124,10 +158,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
-        if not self._authorized(local_only=path.startswith("/room/")):
+        if not self._authorized(local_only=path.startswith("/room/") or path == "/bridge/probe"):
             return
         try:
-            if path in {"/api/status", "/api/busy"}:
+            if path == "/api/local-connection":
+                bridge = self.server.local_connection
+                if local_guard(self.client_address[0], self.headers, self.server.server_port):
+                    self._send({"local": True, "instance": bridge.instance})
+                elif bridge.origin() and single_header(self.headers, "Host") == urlsplit(bridge.origin()).netloc:
+                    self._send({"local": False, "instance": bridge.instance,
+                                "base": f"http://localhost:{self.server.server_port}",
+                                "token": bridge.issue(bridge.origin())})
+                else:
+                    self._send({"error": "Local recording connection is not configured"}, status=503)
+            elif path == "/bridge/probe":
+                self._send({"instance": self.server.local_connection.instance})
+            elif path == "/local-rooms.js":
+                self._send(Path(__file__).with_name("local-rooms.js").read_text(), "text/javascript; charset=utf-8")
+            elif path in {"/api/status", "/api/busy"}:
                 result = {"busy": self.server.busy}
                 if path == "/api/status":
                     with self.server._lock:
@@ -209,7 +257,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._authorized(local_only=True):
             return
-        if not origin_guard(self.headers, self.server.server_port):
+        if not (origin_guard(self.headers, self.server.server_port) or (self._direct() and (single_header(self.headers, "Content-Type") or "").split(";", 1)[0].strip().lower() == "application/json")):
             self._send({"error": "forbidden"}, status=403)
             return
         try:

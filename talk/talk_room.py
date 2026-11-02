@@ -591,8 +591,14 @@ const startat=document.getElementById('startat');startat.max=lines.length;
 startat.addEventListener('change',()=>{post('start',{line:Math.max(1,+startat.value||1)-1});startat.blur();});
 startat.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter')startat.blur();});
 if({{AUDIO}})document.body.classList.add('audio');
+let refreshingRoom=false;
+function refreshRoom(){
+ if(refreshingRoom)return;refreshingRoom=true;
+ if(window.studioRefreshRoom){Promise.resolve(window.studioRefreshRoom()).catch(e=>{refreshingRoom=false;flash(e.message);});}
+ else location.reload();
+}
 const sel=document.getElementById('partsel');sel.value={{SESSIONJSON}};
-sel.addEventListener('change',async()=>{if(await post('part',{name:sel.value}))location.reload();});
+sel.addEventListener('change',async()=>{if(await post('part',{name:sel.value}))refreshRoom();});
 // keep the wheel and arrow keys on the prompter, not the dropdown
 sel.addEventListener('keydown',e=>e.stopPropagation());
 const reh=document.getElementById('reh');
@@ -633,7 +639,7 @@ async function tick(){
   document.body.classList.toggle('nophone',!st.phone);
   if(document.activeElement!==earsel&&st.ear&&earsel.value!==st.ear&&[...earsel.options].some(o=>o.value===st.ear))earsel.value=st.ear;reh.disabled=st.stage!=='idle';reh.checked=st.rehearse;
   document.body.classList.toggle('rehearse',st.rehearse);
-  if(st.session!=={{SESSIONJSON}}){location.reload();return;}
+  if(st.session!=={{SESSIONJSON}}){refreshRoom();return;}
   if(st.missing&&!rolling&&!st.note)st.note=`${st.missing} Claude clips not generated yet`;
   else if(!st.rehearse&&!st.note&&/speaker/i.test(st.ear||''))st.note='Claude is on the speakers and will bleed into the mic: pick Silent (or earbuds) to record';
   else if(!rolling&&!st.note&&st.ear!==SILENT_NAME&&!st.ear.toLowerCase().includes(st.want_ear.toLowerCase()))st.note=`Claude plays on ${st.ear} (${st.want_ear} not connected yet)`;
@@ -652,7 +658,12 @@ async function tick(){
     st.takes.slice().reverse().map(t=>`<tr><td>${t.name}${t.complete?'':' (aborted)'}</td><td>${t.secs}s</td><td>${t.peak??''}</td><td style="color:${t.res==='3840x2160'?'inherit':'var(--warn)'}">${t.res}</td></tr>`).join('');
 }
 setInterval(tick,200);tick();
-if(!{{AUDIO}})setInterval(()=>{if(st.phone)document.getElementById('preview').src='/room/talk/preview.jpg?'+Date.now();},700);
+let previewBusy=false,previewUrl=null;
+if(!{{AUDIO}})setInterval(async()=>{if(!st.phone||previewBusy)return;previewBusy=true;try{
+ const r=await fetch('/room/talk/preview.jpg');if(!r.ok)return;
+ const url=URL.createObjectURL(await r.blob());document.getElementById('preview').src=url;
+ if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=url;
+}catch(e){}finally{previewBusy=false;}},700);
 const earsel=document.getElementById('earsel');const SILENT_NAME={{SILENTJSON}};
 async function loadOutputs(rescan){
   if(rescan)await post('rescan');
