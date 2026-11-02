@@ -1,5 +1,6 @@
-"""Read-only routes and lifecycle. Rooms will extend this foundation later."""
+"""Viewer routes and Mac-only recording room lifecycle."""
 import json
+import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -7,6 +8,7 @@ from urllib.parse import unquote, urlsplit
 
 from .guards import AccessGuard, access_guard, local_guard, origin_guard
 from .media import send_file
+from .rooms import RoomConflict, open_singing, take_path, command
 from .productions import Productions
 from .jobs import Jobs, QueueUnavailable
 from .viewer import page, song
@@ -21,7 +23,8 @@ class StudioServer(ThreadingHTTPServer):
         self.jobs = Jobs()
         self.access = AccessGuard(config)
         self.idle_exit_secs = idle_exit_secs
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self.room = None
         self._busy = False
         self._in_flight = 0
         self._last_request = time.monotonic()
@@ -36,7 +39,7 @@ class StudioServer(ThreadingHTTPServer):
     @property
     def busy(self):
         with self._lock:
-            return self._busy
+            return self._busy or (self.room is not None and self.room.active_stage != "idle")
 
     @busy.setter
     def busy(self, value):
@@ -77,12 +80,25 @@ class StudioServer(ThreadingHTTPServer):
         if self.idle_exit_secs <= 0:
             return
         with self._lock:
-            if (self._stopping or self._busy or self._in_flight
+            if (self._stopping or self.busy or self._in_flight
                     or time.monotonic() - self._last_request < self.idle_exit_secs):
                 return
             self._stopping = True
+            self.close_room()
         # shutdown() must run outside the serve_forever thread.
         threading.Thread(target=self.shutdown, daemon=True).start()
+
+    def close_room(self):
+        if self.room is not None:
+            self.room.close()
+            self.room = None
+
+    def server_close(self):
+        super().server_close()
+        with self._lock:
+            if self.room is not None:
+                self.room.abort()
+                self.close_room()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -111,8 +127,28 @@ class Handler(BaseHTTPRequestHandler):
             if path in {"/api/status", "/api/busy"}:
                 result = {"busy": self.server.busy}
                 if path == "/api/status":
-                    result.update(version=1, room=None, stage="idle")
+                    with self.server._lock:
+                        room = self.server.room
+                        result.update(version=1, room="sing" if room else None,
+                                      stage=room.active_stage if room else "idle")
                 self._send(result)
+            elif path.startswith("/room/sing/"):
+                with self.server._lock:
+                    room = self.server.room
+                    if room is None:
+                        raise FileNotFoundError()
+                    route = path[len("/room/sing/"):]
+                    if route == "":
+                        from songs.sing_room import make_page
+                        self._send(make_page(room), "text/html; charset=utf-8")
+                    elif route == "state":
+                        self._send(room.state())
+                    elif route == "outputs":
+                        self._send(room.outputs())
+                    elif route.startswith("take/") and route.endswith(".wav"):
+                        send_file(self, take_path(room, route[5:-4]))
+                    else:
+                        raise FileNotFoundError()
             elif path == "/api/productions":
                 self._send(self.server.productions.list())
             elif path in {"/", "/jobs"}:
@@ -143,4 +179,34 @@ class Handler(BaseHTTPRequestHandler):
         if not origin_guard(self.headers, self.server.server_port):
             self._send({"error": "forbidden"}, status=403)
             return
-        self._send({"error": "not found"}, status=404)
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 4096 or self.headers.get("Transfer-Encoding"):
+                raise ValueError("a JSON object of at most 4096 bytes is required")
+            body = json.loads(self.rfile.read(size))
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
+            path = urlsplit(self.path).path
+            with self.server._lock:
+                if path == "/room/open":
+                    if self.server.room is not None:
+                        raise RoomConflict("A room is already open; close it first")
+                    self.server.room = open_singing(self.server.productions, body)
+                elif path == "/room/close":
+                    if self.server.busy:
+                        raise RoomConflict("Finish or abort the current activity first")
+                    self.server.close_room()
+                elif path.startswith("/room/sing/") and self.server.room is not None:
+                    command(self.server.room, path[len("/room/sing/"):], body)
+                else:
+                    raise FileNotFoundError()
+            self._send({})
+        except RoomConflict as exc:
+            self._send({"error": str(exc)}, status=409)
+        except FileNotFoundError:
+            self._send({"error": "not found"}, status=404)
+        except (ValueError, TypeError, KeyError) as exc:
+            self._send({"error": str(exc)}, status=400)
+        except Exception:
+            logging.exception("room operation failed")
+            self._send({"error": "Room operation failed; check devices and server log"}, status=503)

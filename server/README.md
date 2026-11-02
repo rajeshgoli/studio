@@ -111,3 +111,16 @@ in use when their file size matches both vocals.wav and marks.json vocals_bytes;
 this follows the recording format, rather than claiming a byte-for-byte identity.
 Missing optional files display empty sections. All metadata reads follow the same
 file allowlist and symlink checks as media.
+
+The singing room opens locally with `POST /room/open` and a JSON body
+`{"kind":"sing","production":"<song-id>"}`. Device names are read at open time
+from `$STUDIO_CONTENT/studio.json`: `{"mic":"<microphone name>","ear":"<earbud name>"}`.
+The page is `/room/sing/`; close it with `POST /room/close` and `{}` once idle.
+All POSTs require `Content-Type: application/json` and an Origin matching the
+local Host, including its port. Another open room or a listener on port 9400
+prevents opening. Preview, recording and marking keep the server busy; closing
+an idle room releases the devices and stops its background threads.
+
+Room regression tests use stand-in streams, a temporary song and an ephemeral
+local port, without touching hardware:
+`python -m unittest server.tests.test_rooms`.
