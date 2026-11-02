@@ -38,6 +38,10 @@ class Ear:
         with self.lock:
             self.buf = None
 
+    def busy(self):
+        with self.lock:
+            return self.buf is not None
+
     def close(self):
         self.stream.close()
 

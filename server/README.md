@@ -17,7 +17,7 @@ a port. `--idle-exit-secs 3600` exits after a quiet hour; zero disables idle exi
 Accepted connections count as in flight until the response finishes. A stalled
 connection has a 15-second socket timeout. The synchronized `server.busy` flag
 prevents idle exit; future rooms must set it while recording, previewing, marking,
-rehearsing, or transferring phone footage. There are no rooms in this package yet.
+rehearsing, or transferring phone footage. Both recording rooms report their active stage; a phone download also keeps the server busy.
 
 ## Routes
 
@@ -59,8 +59,7 @@ team's HTTPS certificate endpoint and cached for five minutes. Signature
 algorithm, issuer, audience, expiry, and email must all match.
 
 Room paths require local access even with a valid token. POST also requires an
-Origin matching the local Host and `Content-Type: application/json`; since no
-mutating routes exist yet, a POST passing the guards returns 404.
+Origin matching the local Host and `Content-Type: application/json`.
 
 ## Checks
 
@@ -128,3 +127,34 @@ recording controls; moving a take or closing the room cannot redirect that playb
 Room regression tests use stand-in streams, a temporary song and an ephemeral
 local port, without touching hardware:
 `python -m unittest server.tests.test_rooms`.
+
+
+## Talking room
+
+Open with `POST /room/open` and `{"kind":"talk","production":"<id>"}` from
+localhost with the matching Origin header, then visit `/room/talk/`. Close with
+`POST /room/close` and `{}`. A second room cannot open until the first closes.
+An older recorder answering on port 9400 must be closed first.
+
+The private `talks/<id>/production.json` supplies `script_dir`, `takes_dir`,
+`parts`, `sessions` (named lists of parts), and `camera_parts`. Paths must remain
+inside that production without symbolic links. Each script part contains
+`lines.json` and optional `clips/NN_claude.wav`. Camera parts default to silent
+output; audio parts use the configured earbud. Every take reloads the clips.
+`studio.json` supplies `mic`, `ear`, and `phone` with `camera_package`,
+`record_tap: [x,y]`, `dcim`, `preview_size: [width,height]`, and optional `serial`.
+
+Read-only local routes are `state`, `outputs`, and `preview.jpg`. Actions use
+JSON POST bodies: `step {dir: 1 or -1}`, `part {name}`, `ear {name}`,
+`start {line}` (zero-based), `rehearse {on: boolean}`, and `abort`, `beep`,
+`rescan` with `{}`. Rehearsal runs the prompter without writing files or tapping
+the camera. With no connected phone, the camera preview shows “No phone
+connected”; starting a camera recording gives a clean “no phone” message.
+
+Full and strip prompter modes, mirror, and browser preferences are retained.
+Takes keep per-line positions counted in recorded mic samples. Existing take
+files are never overwritten. If a phone pull fails, mic audio and line timings
+remain saved and the page reports the error.
+
+Focused hardware-free checks: `python -m unittest talk.tests.test_room -v`.
+A real camera take still needs the owner at the Mac; do not automate playback.
