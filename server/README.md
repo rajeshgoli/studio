@@ -46,8 +46,9 @@ WAV files are converted to 16-bit samples for browser compatibility, in chunks,
 with an eight-file temporary disk cache keyed by the opened file's identity,
 modification/change times, and size. Other media streams directly from disk.
 The shared recording rooms use this package for media playback. The standalone
-singing recorder’s HTTP server and launcher have been retired; choose a song at
-http://localhost:8450 on the recording Mac, then **Open singing room**.
+singing recorder’s HTTP server and launcher have been retired; choose a song in
+the configured public viewer on the recording Mac, then **Open singing room**.
+The page verifies its direct local connection; http://localhost:8450 is a fallback.
 
 ## Access configuration
 
