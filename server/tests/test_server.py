@@ -169,7 +169,7 @@ class ServerTest(unittest.TestCase):
     def test_post_checks(self):
         self.assertEqual(self.request('/room/open', 'POST')[0], 403)
         h = {'Origin': f'http://127.0.0.1:{self.server.server_port}', 'Content-Type': 'application/json'}
-        self.assertEqual(self.request('/room/open', 'POST', h)[0], 404)
+        self.assertEqual(self.request('/room/open', 'POST', h)[0], 400)
         h['Content-Type'] = 'text/plain'
         self.assertEqual(self.request('/room/open', 'POST', h)[0], 403)
 
