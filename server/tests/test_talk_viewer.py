@@ -47,6 +47,17 @@ class TalkViewerTest(unittest.TestCase):
         self.assertEqual(data['publishing']['text'], 'Publishing <text>')
         self.assertEqual(Productions(self.root).list()[0]['kind'], 'talk')
 
+    def test_recording_room_take_names(self):
+        for name in ['all-from-two_take01', 'Round-One_take02', 'Session-A_take03']:
+            self.write(f'takes/{name}_mic.wav')
+            self.write(f'takes/{name}.json', json.dumps({'parts': ['two']}))
+        self.write('takes/Unknown-Part_take04_mic.wav')
+        groups = {p['name']: [t['name'] for t in p['takes']]
+                  for p in self.talks.detail('sample')['parts']}
+        self.assertEqual(set(groups['two']),
+                         {'all-from-two_take01', 'Round-One_take02', 'Session-A_take03'})
+        self.assertEqual(groups['Unassigned'], ['Unknown-Part_take04'])
+
     def test_allowlist_and_symlink_targets(self):
         secret = self.write('build/private.mp4')
         outside = self.root / 'outside.wav'

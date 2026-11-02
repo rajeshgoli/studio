@@ -107,7 +107,7 @@ class Talks:
         if safe_relative(takes):
             names = set()
             for path in (folder / takes).glob('*'):
-                match = re.fullmatch(r'((?:[a-z0-9_]+_)?take\d+)(?:_mic\.wav|_phone\.mp4|\.json)', path.name)
+                match = re.fullmatch(r'((?:[a-zA-Z0-9_][a-zA-Z0-9_-]*_)?take\d+)(?:_mic\.wav|_phone\.mp4|\.json)', path.name)
                 if match:
                     names.add(match[1])
             for name in sorted(names, reverse=True):
