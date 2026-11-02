@@ -64,3 +64,36 @@ Tests use temporary content and ephemeral loopback ports, generated RSA signing
 keys, and a mocked HTTPS key response. They cover local and token guards, POST
 checks, file escapes and links, byte ranges, WAV conversion/cache invalidation,
 idle/busy/in-flight behavior, lazy imports, and launchd socket adoption.
+
+## Installed server (macOS)
+
+Run `scripts/install-server.sh` from a checkout. It fetches `origin/main`, archives
+that commit into `~/.local/share/studio/releases/<sha>`, and installs Python 3.12
+and the requirements with `uv`. Uncommitted files and the current branch are not
+installed. `python3`, `uv`, `git`, and `sm` must be on PATH.
+
+The `com.rajeshgoli.studio-server` LaunchAgent listens on `127.0.0.1:8450` and
+starts Python when a request arrives. It exits after an hour without requests.
+The installer checks `/api/busy` before stopping a job, including during
+`--uninstall`; busy, malformed, or unreachable responses from a loaded job refuse
+the operation. There is no force option. The check is repeated after preparing
+the release. Avoid starting a recording during an installation: the busy check
+and launchd stopping the process are separate operations.
+
+Overrides: `STUDIO_PORT`, `STUDIO_LABEL`, `STUDIO_SHARE` (release store and logs),
+`STUDIO_PLIST` (full plist path), `STUDIO_CONTENT` (default
+`~/projects/studio-content`), `STUDIO_IDLE_EXIT_SECS`, and `STUDIO_INSTALL_PYTHON`
+(the Python executable used by the installer). Use a distinct port, label, share,
+and plist for testing. An existing plist supplies the old port during an update.
+
+`current` is switched by an atomic rename. The three most recently installed
+complete releases stay in `releases`; older ones move to `retired-releases` so no
+user files are deleted. An interrupted dependency install leaves an incomplete
+release: move it aside before retrying. Failed activation is reported, with logs
+in `STUDIO_SHARE/logs/server.{out,err}.log` available for diagnosis.
+`--uninstall` unloads the job and moves its plist to `retired-plists`; releases and
+logs remain. The first microphone use from the installed Python may require the
+owner to allow microphone access in System Settings (checked by the singing-room
+ticket).
+
+Installer safety tests: `python3 -m unittest discover -s scripts/tests -v`.
