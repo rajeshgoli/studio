@@ -677,12 +677,23 @@ loadOutputs(false);
 </script></body></html>"""
 
 
+def face_text(face):
+    # Scripts give a face as one emoji, or as cues like [{"emoji": "😳", "after_word": 0}].
+    if isinstance(face, str):
+        return face
+    if isinstance(face, list):
+        return " ".join(c["emoji"] if isinstance(c, dict) else c for c in face
+                        if isinstance(c, str) or isinstance(c, dict) and isinstance(c.get("emoji"), str))
+    return ""
+
+
 def make_page(room):
     rows = []
     for k, l in enumerate(room.lines):
         if k == 0 or l["part"] != room.lines[k - 1]["part"]:
             rows.append(f'<div class="part" data-at="{k}">{html.escape(" · ".join(l["card"][:2]))}</div>')
-        face = f'<span class="face">{html.escape(l["face"])}</span>' if l.get("face") else ""
+        face = face_text(l.get("face"))
+        face = f'<span class="face">{html.escape(face)}</span>' if face else ""
         rows.append(f'<div class="line{" claude" if l["speaker"] == "CLAUDE" else ""}"><span class="ln">{k + 1}</span>{render_line(l["text"])}{face}</div>')
     lines_html = "\n".join(rows)
     choices = "".join(f'<option value="{html.escape(v, quote=True)}">{html.escape(t)}</option>' for v, t in room.choices)

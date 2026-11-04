@@ -130,7 +130,9 @@ class TalkTest(harness.RoomTest):
         self.assertEqual(self.request('/api/status')[0], 200)
         self.assertEqual(json.loads(self.request('/api/status')[1])['room'], 'talk')
         room.lines[0]['text'] = '</script><img src=x onerror=alert(1)>'
+        room.lines[0]['face'] = [{'emoji': '😳', 'after_word': 0}, {'emoji': '<b>', 'after_word': 2}]
         page = make_page(room)
+        self.assertIn('<span class="face">😳 &lt;b&gt;</span>', page)
         self.assertNotIn('</script><img', page)
         self.assertNotIn('{{', page)
         self.assertIn('localStorage', page)
