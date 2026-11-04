@@ -99,6 +99,26 @@ class AccessTest(unittest.TestCase):
         self.assertFalse(self.guard(headers(Cf_Access_Jwt_Assertion='not.a.token')))
         self.assertFalse(self.guard(headers()))
 
+    def test_owner_device_certificate(self):
+        device = {k: v for k, v in self.claims.items() if k != 'email'}
+        device['common_name'] = 'studio'
+        self.assertFalse(self.check(device))
+        self.config.write_text(json.dumps(dict(access_team='test-team', access_aud='test-aud',
+                                               owner_email='owner@example.test', owner_devices=['studio'])))
+        self.assertTrue(self.check(device))
+        self.assertTrue(self.check())
+        for field, value in [('common_name', 'other'), ('common_name', ''), ('common_name', None),
+                             ('aud', 'wrong'), ('iss', 'https://wrong.example'), ('exp', time.time() - 1)]:
+            with self.subTest(field=field, value=value):
+                self.assertFalse(self.check(dict(device, **{field: value})))
+        # An email identity is never upgraded by a listed certificate name.
+        self.assertFalse(self.check(dict(device, email='wrong@example.test')))
+        for devices in ['studio', [''], [1], None]:
+            with self.subTest(devices=devices):
+                self.config.write_text(json.dumps(dict(access_team='test-team', access_aud='test-aud',
+                                                       owner_email='owner@example.test', owner_devices=devices)))
+                self.assertFalse(self.check(device))
+
     def test_missing_config_and_keys(self):
         self.config.unlink()
         self.assertFalse(self.check())

@@ -60,6 +60,12 @@ Missing or invalid settings deny non-local access. Keys are fetched from the
 team's HTTPS certificate endpoint and cached for five minutes. Signature
 algorithm, issuer, audience, expiry, and email must all match.
 
+For certificate sign-in (a Cloudflare Access policy that admits the owner's
+enrolled computers by client certificate), list their certificate common names in
+the optional `owner_devices` array, e.g. `["studio", "macbook"]`. A token without
+`email` is then accepted only if its `common_name` is listed; a token with an
+email must still match `owner_email`.
+
 Room paths require local access even with a valid token. POST also requires an
 Origin matching the local Host and `Content-Type: application/json`.
 

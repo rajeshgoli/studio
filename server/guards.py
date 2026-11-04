@@ -40,9 +40,14 @@ class AccessGuard:
         try:
             config = json.loads(self.config_path.read_text())
             team, audience, email = (config[k] for k in ("access_team", "access_aud", "owner_email"))
+            # Optional: common names of the owner's enrolled certificates (Cloudflare
+            # certificate sign-in issues a token with common_name instead of email).
+            devices = config.get("owner_devices", [])
             if (not isinstance(team, str) or not re.fullmatch(r"[a-zA-Z0-9-]+", team)
                     or not isinstance(audience, str) or not audience
-                    or not isinstance(email, str) or not email):
+                    or not isinstance(email, str) or not email
+                    or not isinstance(devices, list)
+                    or not all(isinstance(d, str) and d for d in devices)):
                 return False
             import jwt
             header = jwt.get_unverified_header(token)
@@ -56,8 +61,10 @@ class AccessGuard:
                 client = self._clients[issuer]
             key = client.get_signing_key_from_jwt(token)
             claims = jwt.decode(token, key.key, algorithms=["RS256"], audience=audience,
-                                issuer=issuer, options={"require": ["exp", "iss", "aud", "email"]})
-            return claims["email"] == email
+                                issuer=issuer, options={"require": ["exp", "iss", "aud"]})
+            if "email" in claims:
+                return claims["email"] == email
+            return claims.get("common_name") in devices
         except Exception:
             # Configuration, unavailable keys, missing dependency, and bad tokens all deny access.
             return False
