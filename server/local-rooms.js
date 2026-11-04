@@ -31,7 +31,7 @@ function leaveRoom(){
 const note=panel.querySelector('#local-note'), retry=panel.querySelector('#local-retry');
 const back=panel.querySelector('#room-return'), close=panel.querySelector('#room-close');
 const screen=panel.querySelector('#room-screen');
-let kind=null;
+let kind=null, roomError='';
 const message=s=>{note.textContent=s;};
 async function json(response){const value=await response.json();if(!response.ok)throw Error(value.error||'Studio connection failed');return value;}
 async function credentials(){
@@ -62,13 +62,15 @@ async function status(){
  if(!kind&&activeFrame)leaveRoom();
  const oldStatus=document.getElementById('room');if(oldStatus)oldStatus.closest('section').hidden=true;
  document.querySelectorAll('[data-open-room]').forEach(b=>{b.disabled=!!kind;});
- if(!activeFrame)message(kind?'A '+kind+' room is open · '+s.stage:'Connected to this recording Mac. Choose a production to open its room.');
+ // A failed room page stays explained until the room changes or opens.
+ if(!kind)roomError='';
+ if(!activeFrame)message(kind?roomError||'A '+kind+' room is open · '+s.stage:'Connected to this recording Mac. Choose a production to open its room.');
  return s;
 }
 async function showRoom(){
  if(!kind)return;
  const res=await window.studioFetch('/room/'+kind+'/');
- if(!res.ok)throw Error((await res.json()).error||'Room unavailable');
+ if(!res.ok)throw Error((await res.json().catch(()=>({}))).error||'Room unavailable');
  let html=await res.text();
  // The trusted room page runs under this page's origin; its requests use the
  // parent's verified direct transport. No credential is placed in a URL.
@@ -79,7 +81,7 @@ async function showRoom(){
  enterRoom();
  activeFrame.srcdoc=html;screen.append(activeFrame);
  message('Connected to this recording Mac · '+(kind==='sing'?'Singing':'Talking')+' room');
- activeFrame.focus();
+ roomError='';activeFrame.focus();
 }
 window.studioRefreshRoom=source=>{if(source===activeFrame?.contentWindow)return showRoom();};
 async function connect(){
@@ -90,13 +92,15 @@ async function connect(){
 }
 exit.onclick=async()=>{try{const s=await status();if(s.busy){message('Finish or abort the current activity before returning to productions.');return;}leaveRoom();await status();}catch(e){message(e.message);}};
 retry.onclick=connect;
-back.onclick=()=>showRoom().catch(e=>message(e.message));
+const roomFailed=e=>{roomError='Could not show the '+kind+' room: '+e.message;message(roomError);};
+back.onclick=()=>showRoom().catch(roomFailed);
 close.onclick=async()=>{try{await json(await window.studioFetch('/room/close',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}));leaveRoom();await status();}catch(e){message(e.message);}};
 document.addEventListener('click',async e=>{
  const button=e.target.closest('[data-open-room]');if(!button)return;
  button.disabled=true;
- try{await json(await window.studioFetch('/room/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:button.dataset.openRoom,production:button.dataset.production})}));await status();await showRoom();}
- catch(error){message(error.message);button.disabled=false;}
+ try{await json(await window.studioFetch('/room/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:button.dataset.openRoom,production:button.dataset.production})}));await status();}
+ catch(error){message(error.message);button.disabled=false;return;}
+ await showRoom().catch(roomFailed);
 });
 // Viewer refreshes replace production cards; keep their controls in sync.
 new MutationObserver(()=>document.querySelectorAll('[data-open-room]').forEach(b=>{b.disabled=!connection||!!kind;})).observe(document.querySelector('#content'),{childList:true,subtree:true});
