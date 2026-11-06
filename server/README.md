@@ -160,6 +160,14 @@ the camera. With no connected phone, the camera preview shows “No phone
 connected”; starting a camera recording gives a clean “no phone” message.
 
 Full and strip prompter modes, mirror, and browser preferences are retained.
+Both modes show a line's acting cues as small tags at the gap where they happen,
+so a laugh in a take lands where the animation shows it. A line's
+`acting_cues` (`[{"direction": "laughing 🤣", "after_word": N}]`) are used when
+present; otherwise a list `face` (`[{"emoji": "🤣", "after_word": N}]`, or an
+`anchor` word) takes its text from `directions` paired by order when the counts
+match, else shows the emoji alone. `after_word` counts the whitespace-separated
+words of `text` said before the cue, as the animation does: 0 is before the first
+word. A `face` given as one string still shows at the end of the line.
 Takes keep per-line positions counted in recorded mic samples. Existing take
 files are never overwritten. If a phone pull fails, mic audio and line timings
 remain saved and the page reports the error.

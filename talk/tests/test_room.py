@@ -1,17 +1,19 @@
 """Exercise the recording flow without opening hardware or playing sound."""
 import json
+import shutil
 import subprocess
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 import soundfile as sf
 from server.tests import test_rooms as harness
 from talk.phone import Phone
-from talk.talk_room import RATE, SILENT, make_page
+from talk.talk_room import PAGE, RATE, SILENT, line_cues, make_page, render_cued
 
 PHONE = dict(camera_package='example.camera', record_tap=[10, 20],
              dcim='/sdcard/DCIM/Camera', preview_size=[300, 200], serial='test-device')
@@ -132,7 +134,7 @@ class TalkTest(harness.RoomTest):
         room.lines[0]['text'] = '</script><img src=x onerror=alert(1)>'
         room.lines[0]['face'] = [{'emoji': '😳', 'after_word': 0}, {'emoji': '<b>', 'after_word': 2}]
         page = make_page(room)
-        self.assertIn('<span class="face">😳 &lt;b&gt;</span>', page)
+        self.assertIn('<span class="cue">😳</span> &lt;/script&gt;&lt;img src=x <span class="cue">&lt;b&gt;</span> onerror', page)
         self.assertNotIn('</script><img', page)
         self.assertNotIn('{{', page)
         self.assertIn('localStorage', page)
@@ -151,6 +153,72 @@ class TalkTest(harness.RoomTest):
 for name in list(vars(harness.RoomTest)):
     if name.startswith('test_') and name not in TalkTest.__dict__:
         setattr(TalkTest, name, None)
+
+
+class CueTest(unittest.TestCase):
+    """Acting cues sit at their word in the prompter, where the animation shows them."""
+    TEXT = 'We built it out of old parts . Nobody fixes anything . Done'
+
+    def page(self, *lines):
+        room = SimpleNamespace(lines=[{'part': 'p', 'card': ['P'], 'speaker': 'RAJESH', **l} for l in lines],
+                               choices=[('p', 'p')], session='p', video=False, phone=SimpleNamespace(size=(9, 16)))
+        page = make_page(room)
+        data = json.loads(page.split('const LINES=', 1)[1].split(';\n', 1)[0])
+        return page, data
+
+    def test_face_cues_take_paired_directions(self):
+        line = {'text': self.TEXT, 'directions': ['melting a little 🫠', 'giggling 🤭', 'laughing 🤣'],
+                'face': [{'emoji': '🫠', 'after_word': 7}, {'emoji': '🤭', 'after_word': 11}, {'emoji': '🤣', 'after_word': 13}]}
+        self.assertEqual(line_cues(line), [(7, '🫠 melting a little'), (11, '🤭 giggling'), (13, '🤣 laughing')])
+        self.assertEqual(render_cued(line['text'], line_cues(line)),
+                         'We built it out of old parts <span class="cue">🫠 melting a little</span> . Nobody fixes anything '
+                         '<span class="cue">🤭 giggling</span> . Done <span class="cue">🤣 laughing</span>')
+
+    def test_unpaired_or_conflicting_directions_show_emoji_alone(self):
+        face = [{'emoji': '😏', 'after_word': 1}, {'emoji': '🤣', 'after_word': 2}]
+        for directions in (['laughing 🤣'], ['sheepish', 'smug 😏 then laughing 🤣'], None, ['a', 3]):
+            self.assertEqual(line_cues({'text': 'a b c', 'directions': directions, 'face': face}), [(1, '😏'), (2, '🤣')])
+        # A direction without an emoji still pairs by order.
+        self.assertEqual(line_cues({'text': 'a b c', 'directions': ['sly', 'big laugh'], 'face': face}),
+                         [(1, '😏 sly'), (2, '🤣 big laugh')])
+
+    def test_positions_clamp_and_anchor(self):
+        face = [{'emoji': '1', 'after_word': -2}, {'emoji': '2', 'after_word': 99}, {'emoji': '3', 'after_word': True},
+                {'emoji': '4', 'anchor': 'Clock'}, {'emoji': '5', 'anchor': 'absent'}, '6', {'emoji': ''}, {'after_word': 1}, 7]
+        self.assertEqual(line_cues({'text': 'look at the clock, now', 'face': face}),
+                         [(0, '1'), (5, '2'), (5, '3'), (3, '4'), (5, '5'), (5, '6')])
+
+    def test_acting_cues_win_over_face(self):
+        line = {'text': 'a b c', 'face': [{'emoji': '🤣', 'after_word': 0}], 'directions': ['laughing 🤣'],
+                'acting_cues': [{'direction': 'laughing 🤣', 'after_word': 0, 'anchor': 'a', 'placement': 'before'},
+                                {'direction': 'long pause', 'after_word': 3}, {'direction': 5, 'after_word': 1}]}
+        self.assertEqual(line_cues(line), [(0, '🤣 laughing'), (3, 'long pause')])
+        self.assertEqual(line_cues({**line, 'acting_cues': []}), [(0, '🤣 laughing')])
+
+    def test_page_keeps_string_face_and_sends_cues_to_strip_mode(self):
+        page, data = self.page({'text': 'Hello there', 'face': '😁'},
+                               {'text': '*Big* (aside) <b>', 'face': [{'emoji': '<i>', 'after_word': 1}]},
+                               {'speaker': 'CLAUDE', 'text': 'Fine', 'acting_cues': [{'direction': 'deadpan', 'after_word': 0}]})
+        self.assertIn('Hello there<span class="face">😁</span>', page)
+        self.assertIn('<em>Big</em> <span class="cue">&lt;i&gt;</span> <span class="dir">(aside)</span> &lt;b&gt;', page)
+        self.assertIn('<span class="cue">deadpan</span> Fine', page)
+        self.assertNotIn('<i>', page)
+        self.assertEqual([(l['words'], l['cues']) for l in data],
+                         [(['Hello', 'there'], []), (['*Big*', '(aside)', '<b>'], [[1, '<i>']]), (['Fine'], [[0, 'deadpan']])])
+
+    @unittest.skipUnless(shutil.which('node'), 'node not installed')
+    def test_strip_chunks_carry_cues(self):
+        js = PAGE[PAGE.index('function items('):PAGE.index('const CHUNKS')]
+        lines = [{'words': self.TEXT.split(), 'cues': [[7, 'A'], [11, 'B'], [13, 'C']]},
+                 {'words': ['(aside)', 'Go', 'now', '(beat)', 'then', 'stop'], 'cues': [[0, 'X'], [3, 'Y'], [1, 'Z']]},
+                 {'words': [], 'cues': [[0, 'only']]}]
+        out = subprocess.run(['node', '-e', js + f'console.log(JSON.stringify({json.dumps(lines)}.map(l=>chunk(items(l)))))'],
+                             capture_output=True, text=True, check=True).stdout
+        show = lambda chunks: [' '.join(x if isinstance(x, str) else f"[{x['cue']}]" for x in c) for c in chunks]
+        self.assertEqual([show(c) for c in json.loads(out)], [
+            ['We built it out', 'of old parts [A] .', 'Nobody fixes anything [B] .', 'Done [C]'],
+            ['[X] (aside)', '[Z] Go now', '[Y] (beat)', 'then stop'],
+            ['[only]']])
 
 
 class PhoneTest(unittest.TestCase):
