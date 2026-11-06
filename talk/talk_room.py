@@ -512,6 +512,9 @@ main{overflow:hidden;padding:4vh 4vw;display:flex;flex-direction:column;justify-
 .line.next{color:#8b8b93}
 .part{font-size:14px;letter-spacing:.12em;color:var(--accent);font-weight:700;text-transform:uppercase;border-top:1px solid #333;padding-top:8px}
 .face{font-size:.7em;margin-left:.3em;opacity:.8}
+/* an acting cue (a face or stage direction) at its word: a tag to act on, not words to say */
+.cue{display:inline-block;white-space:nowrap;vertical-align:middle;margin:0 .15em;padding:.1em .5em;font-size:.5em;line-height:1.3;font-style:normal;font-weight:500;letter-spacing:0;color:#93c5fd;background:#1e3a5f66;border:1px dashed #93c5fd99;border-radius:999px}
+.line:not(.cur) .cue{opacity:.6}
 body.audio #phonebox{display:none}
 em{color:var(--accent);font-style:normal}.dir{color:var(--dim);font-style:italic;font-weight:400}
 aside{background:var(--panel);border-left:1px solid #222;padding:16px;display:flex;flex-direction:column;gap:16px;overflow:auto}
@@ -556,13 +559,26 @@ const HINT={idle:"Scroll down to start the take.",
  saving:{{SAVING}}};
 let st={stage:"idle",line:0},lastStep=0,ups=[];
 const LINES={{LINESJSON}};
-// 3-4 word chunks for strip mode, breaking after punctuation; stage directions get their own chunk
-function chunk(text){const out=[];let cur=[];
-  const toks=text.replace(/\*/g,'').match(/\([^)]*\)|\S+/g)||[];
-  for(const t of toks){if(t.startsWith('(')){if(cur.length)out.push(cur.join(' '));out.push(t);cur=[];continue;}
-    cur.push(t);if(cur.length>=4||(/[.?!,]$/.test(t)&&cur.length>=2)){out.push(cur.join(' '));cur=[];}}
-  if(cur.length)out.push(cur.join(' '));return out;}
-const CHUNKS=LINES.map(l=>l.speaker==='RAJESH'?chunk(l.text):[l.text]);
+// A line's words with each acting cue ({cue}) before the word it precedes; cues past the end trail it
+function items(l){const out=[],at=k=>l.cues.filter(c=>c[0]===k).map(c=>({cue:c[1]}));
+  l.words.forEach((w,k)=>{out.push(...at(k));const t=w.replace(/\*/g,'');if(t)out.push(t);});
+  out.push(...at(l.words.length));return out;}
+// 3-4 word chunks for strip mode, breaking after punctuation; stage directions get their own chunk.
+// A cue opens the chunk after it; cues after the last word join the last chunk.
+function chunk(list){const out=[];let cur=[],n=0,paren=false;
+  const close=()=>{const lead=[];while(cur.length&&typeof cur[cur.length-1]!=='string')lead.unshift(cur.pop());
+    out.push(cur);cur=lead;n=0;};
+  for(const x of list){
+    if(typeof x!=='string'){cur.push(x);continue;}
+    if(!paren&&x.startsWith('(')){if(n)close();paren=true;}
+    cur.push(x);n++;
+    if(paren){if(x.includes(')')){paren=false;close();}}
+    else if(n>=4||(/[.?!,]$/.test(x)&&n>=2))close();}
+  if(n||!out.length)out.push(cur);else out[out.length-1].push(...cur);
+  return out;}
+const CHUNKS=LINES.map(l=>l.speaker==='RAJESH'?chunk(items(l)):[items(l)]);
+function fill(el,list){el.replaceChildren();list.forEach((x,i)=>{if(i)el.append(' ');
+  if(typeof x==='string')el.append(x);else{const s=document.createElement('span');s.className='cue';s.textContent=x.cue;el.append(s);}});}
 let ci=0,ciLine=-1;
 const pref=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}};
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
@@ -574,7 +590,7 @@ function curLine(){return st.stage==='idle'?(st.start||0):st.line;}
 function renderStrip(){const i=curLine();if(i!==ciLine){ciLine=i;ci=0;}
   const l=LINES[i],c=CHUNKS[i],el=document.getElementById('striptxt');
   el.className='txt'+(l.speaker==='CLAUDE'?' claude':'');
-  el.textContent=l.speaker==='CLAUDE'?'Claude…':c[ci];
+  if(l.speaker==='CLAUDE')el.textContent='Claude…';else fill(el,c[ci]);
   document.getElementById('sdot').classList.toggle('on',st.stage==='rolling');
   document.getElementById('smeta').textContent=st.stage==='rolling'?`${st.take} · line ${i+1}/${st.last+1}`+(l.speaker==='RAJESH'?` · ${ci+1}/${c.length}`:''):st.stage==='saving'?'saving…':'scroll down to start';}
 (function drag(){const box=document.getElementById('strip');let d=null;
@@ -677,27 +693,81 @@ loadOutputs(false);
 </script></body></html>"""
 
 
-def face_text(face):
-    # Scripts give a face as one emoji, or as cues like [{"emoji": "😳", "after_word": 0}].
-    if isinstance(face, str):
-        return face
-    if isinstance(face, list):
-        return " ".join(c["emoji"] if isinstance(c, dict) else c for c in face
-                        if isinstance(c, str) or isinstance(c, dict) and isinstance(c.get("emoji"), str))
-    return ""
+EMOJI = re.compile(r"[\u2300-\u23ff\u2600-\u27bf\u2b00-\u2bff\U0001f000-\U0001faff][\ufe0f\u200d\u2600-\u27bf\U0001f000-\U0001faff]*")
+SLOT = re.compile("\ue000([0-9]+)\ue001")
+
+
+def _norm(word):
+    return "".join(ch for ch in word.lower() if ch.isalnum() or ch == "'")
+
+
+def _at(cue, words):
+    """Where a cue sits among the line's words (its whitespace tokens, as the animation counts them):
+    before word `after_word`, which is the count of words said before it; else before the word it
+    names as `anchor`; else after the last word."""
+    n = cue.get("after_word")
+    if isinstance(n, int) and not isinstance(n, bool):
+        return min(max(n, 0), len(words))
+    anchor = cue.get("anchor")
+    if isinstance(anchor, str):
+        hits = [k for k, w in enumerate(words) if _norm(w) == _norm(anchor)]
+        if hits:
+            return hits[0]
+    return len(words)
+
+
+def _label(direction, emoji=""):
+    # "laughing 🤣" -> "🤣 laughing": the face first, then what to do.
+    faces = [emoji] if emoji else EMOJI.findall(direction)
+    rest = " ".join(EMOJI.sub(" ", direction).split())
+    return " ".join(faces + ([rest] if rest else []))
+
+
+def line_cues(line):
+    """[(position, label)] for the acting cues shown inline: `acting_cues` when the script has them,
+    else a list `face`, whose cues take their text from `directions` paired by order (only when the
+    counts match and no direction shows a different face)."""
+    words = line["text"].split()
+    acting = [c for c in line.get("acting_cues") or [] if isinstance(c, dict) and isinstance(c.get("direction"), str)]
+    if acting:
+        return [(_at(c, words), _label(c["direction"])) for c in acting]
+    face = line.get("face")
+    if not isinstance(face, list):
+        return []
+    face = [{"emoji": c} if isinstance(c, str) else c for c in face]
+    face = [c if isinstance(c, dict) and isinstance(c.get("emoji"), str) and c["emoji"] else None for c in face]
+    directions = line.get("directions")
+    bare = lambda s: s.replace("\ufe0f", "")
+    paired = (isinstance(directions, list) and len(directions) == len(face)
+              and all(isinstance(d, str) and (c is None or {bare(e) for e in EMOJI.findall(d)} <= {bare(c["emoji"])})
+                      for d, c in zip(directions, face)))
+    return [(_at(c, words), _label(directions[k], c["emoji"]) if paired else c["emoji"])
+            for k, c in enumerate(face) if c is not None]
+
+
+def render_cued(text, cues):
+    """The line as HTML, each cue a marker before the word it precedes."""
+    words = [w.replace("\ue000", "").replace("\ue001", "") for w in text.split()]
+    slots = [[] for _ in range(len(words) + 1)]
+    for k, (at, _) in enumerate(cues):
+        slots[at].append(f"\ue000{k}\ue001")
+    marked = " ".join(t for at, word in enumerate(words + [""]) for t in slots[at] + [word] if t)
+    return SLOT.sub(lambda m: f'<span class="cue">{html.escape(cues[int(m[1])][1])}</span>', render_line(marked))
 
 
 def make_page(room):
-    rows = []
+    rows, data = [], []
     for k, l in enumerate(room.lines):
         if k == 0 or l["part"] != room.lines[k - 1]["part"]:
             rows.append(f'<div class="part" data-at="{k}">{html.escape(" · ".join(l["card"][:2]))}</div>')
-        face = face_text(l.get("face"))
+        cues = line_cues(l)
+        face = l.get("face") if isinstance(l.get("face"), str) else ""   # one face for the whole line, as before
         face = f'<span class="face">{html.escape(face)}</span>' if face else ""
-        rows.append(f'<div class="line{" claude" if l["speaker"] == "CLAUDE" else ""}"><span class="ln">{k + 1}</span>{render_line(l["text"])}{face}</div>')
+        rows.append(f'<div class="line{" claude" if l["speaker"] == "CLAUDE" else ""}"><span class="ln">{k + 1}</span>{render_cued(l["text"], cues)}{face}</div>')
+        data.append({"speaker": l["speaker"], "text": l["text"], "words": l["text"].split(), "cues": cues})
     lines_html = "\n".join(rows)
     choices = "".join(f'<option value="{html.escape(v, quote=True)}">{html.escape(t)}</option>' for v, t in room.choices)
     return PAGE.replace("{{PHONEASPECT}}", f"{room.phone.size[0]}/{room.phone.size[1]}").replace("{{SILENTJSON}}", json.dumps(SILENT)).replace("{{CHOICES}}", choices).replace("{{SESSIONJSON}}", json.dumps(room.session)).replace("{{AUDIO}}", "false" if room.video else "true").replace(
         "{{SAVING}}", json.dumps("Saving and pulling the video from the phone…" if room.video else "Saving…")).replace(
         "{{LINES}}", lines_html).replace(
-        "{{LINESJSON}}", json.dumps([{"speaker": l["speaker"], "text": l["text"]} for l in room.lines]).replace("<", "\\u003c"))
+        "{{LINESJSON}}", json.dumps(data).replace("<", "\\u003c"))
